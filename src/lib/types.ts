@@ -36,4 +36,6 @@ export type Entry = {
   created_at: string
   updated_at: string
   deleted_at: string | null
+  /** 在網站記的是 app，在 LINE 群組打字記的是 line */
+  via?: 'app' | 'line'
 }

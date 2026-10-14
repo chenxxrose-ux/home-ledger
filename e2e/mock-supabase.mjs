@@ -209,6 +209,31 @@ const cors = {
   'access-control-expose-headers': '*',
 }
 
+// ───── LINE 機器人（edge function hl-line）的替身：不真的連 LINE，記下會傳出去的 ─────
+const line = { ready: false, botName: '', basicId: '', group: '', notify: true, pair: null, sent: [] }
+async function lineFn(res, b, user) {
+  if (!user) return send(res, 403, { error: 'not member' })
+  const status = () => ({ ready: line.ready, botName: line.botName, basicId: line.basicId, group: line.group, notify: line.notify, quota: line.group ? { used: line.sent.length * 2, max: 200 } : null })
+  if (b.op === 'status') return send(res, 200, status())
+  if (b.op === 'setup') {
+    if (!/^[0-9a-f]{32}$/i.test(b.secret ?? '')) return send(res, 400, { error: 'bad secret' })
+    if ((b.token ?? '').length < 100) return send(res, 400, { error: 'bad token' })
+    Object.assign(line, { ready: true, botName: '偶們家記帳', basicId: '@000test' })
+    return send(res, 200, { ok: true, botName: line.botName, basicId: line.basicId, webhook: true })
+  }
+  if (b.op === 'pair') return send(res, 200, { code: (line.pair = '123456'), basicId: line.basicId })
+  if (b.op === 'unlink') return send(res, 200, Object.assign(line, { group: '' }) && { ok: true })
+  if (b.op === 'notify_set') return send(res, 200, Object.assign(line, { notify: !!b.on }) && { ok: true })
+  if (b.op === 'notify') {
+    const r = await serial(() => db.query(`select * from hl_entries where id = $1`, [b.id]))
+    const e = r.rows[0]
+    if (!line.group || !line.notify || !e || e.via !== 'app' || e.created_by !== user.id) return send(res, 200, { sent: false })
+    line.sent.push({ id: e.id, by: user.name, amount: e.amount, title: e.title })
+    return send(res, 200, { sent: true })
+  }
+  send(res, 400, { error: 'op' })
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, cors)
@@ -240,6 +265,11 @@ const server = http.createServer(async (req, res) => {
       return u ? send(res, 200, userJson(u)) : send(res, 401, { message: 'invalid token' })
     }
     if (url.pathname === '/auth/v1/logout') return send(res, 204, '')
+    if (url.pathname === '/functions/v1/hl-line') return lineFn(res, body, userFromAuth(req))
+    if (url.pathname === '/__test/line') {
+      if (body.pair) Object.assign(line, { group: '偶們家', pair: null })
+      return send(res, 200, line)
+    }
     if (url.pathname.startsWith('/rest/v1/')) {
       return await handleRest(req, res, url, body, userFromAuth(req))
     }
