@@ -202,6 +202,46 @@ test('LINE 群組：設定機器人、配對，記一筆就傳到群組', async 
   expect(sent[0]).toMatchObject({ by: '阿寶', amount: 65, title: '飲料' })
 })
 
+test('結算：每一筆都累計，按結算變成第 1 次，可以復原', async () => {
+  const [{ out, n }] = await sql<{ out: number; n: number }>(
+    `select coalesce(sum(amount) filter (where kind = 'out'), 0)::int as out, count(*)::int as n from hl_entries where deleted_at is null and settlement_id is null and day <= $1`,
+    [today],
+  )
+  expect(n).toBeGreaterThan(0)
+  const fmt = (x: number) => x.toLocaleString('en-US')
+  await bao.getByRole('button', { name: '主畫面' }).click()
+  await bao.getByRole('button', { name: /還沒結算，累計支出/ }).click()
+  await expect(bao.getByRole('heading', { name: '結算', level: 1 })).toBeVisible()
+  const hero = bao.getByRole('region', { name: '還沒結算', exact: true })
+  await expect(hero).toContainText(fmt(out))
+  await shot(bao, '12-結算')
+  await hero.getByRole('button', { name: `結算這 ${n} 筆` }).click()
+  const dlg = bao.getByRole('dialog', { name: '結算' })
+  await expect(dlg).toContainText(fmt(out))
+  await dlg.getByRole('button', { name: '結算', exact: true }).click()
+  await expect(dlg).toBeHidden()
+  await expect(bao.getByRole('status').filter({ hasText: '第 1 次結算完成' })).toBeVisible()
+  await expect(hero.getByRole('button', { name: '沒有要結算的' })).toBeDisabled()
+  // 另一支手機也看得到
+  await berry.getByRole('button', { name: '結算' }).click()
+  await expect(berry.getByRole('button', { name: /第 1 次結算/ })).toBeVisible({ timeout: 10000 })
+
+  // 復原 → 又回到還沒結算
+  await bao.getByRole('button', { name: '復原' }).click()
+  await expect(hero.getByRole('button', { name: `結算這 ${n} 筆` })).toBeEnabled()
+  await expect(bao.getByRole('button', { name: /第 1 次結算/ })).toHaveCount(0)
+
+  // 再結算一次，打開明細
+  await hero.getByRole('button', { name: `結算這 ${n} 筆` }).click()
+  await bao.getByRole('dialog', { name: '結算' }).getByRole('button', { name: '結算', exact: true }).click()
+  await bao.getByRole('button', { name: /第 1 次結算/ }).click()
+  const detail = bao.getByRole('dialog', { name: /第 1 次結算｜/ })
+  await expect(detail.locator('.entry-row')).toHaveCount(n)
+  await expect(detail.getByText('已結算').first()).toBeVisible()
+  await shot(bao, '13-結算明細')
+  await detail.getByRole('button', { name: '關閉' }).click()
+})
+
 test('離線時看得到資料，但不能記帳', async () => {
   await bao.getByRole('button', { name: '主畫面' }).click()
   await baoCtx.setOffline(true)

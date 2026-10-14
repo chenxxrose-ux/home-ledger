@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { useData } from '../data/store'
 import { MonthBar } from '../../ui/kit'
-import { cumulative, inMonth, totals } from '../../lib/stats'
+import { cumulative, inMonth, totals, unsettled } from '../../lib/stats'
 import { fmt } from '../../lib/money'
 import { daysInMonth, formatDay, monthOf, parseYmd, shiftMonth, taipeiToday } from '../../lib/dates'
 import { TrendChart } from './TrendChart'
 import { EntryRow } from '../shared/EntryRow'
+import { UiIcon } from '../../ui/icons'
 import type { Entry, Kind } from '../../lib/types'
 
 export function HomePage({
@@ -13,11 +14,13 @@ export function HomePage({
   setMonth,
   onAdd,
   onOpen,
+  onSettle,
 }: {
   month: string
   setMonth: (m: string) => void
   onAdd: (k: Kind) => void
   onOpen: (e: Entry) => void
+  onSettle: () => void
 }) {
   const data = useData()
   const today = taipeiToday()
@@ -38,6 +41,8 @@ export function HomePage({
     [data.entries],
   )
   const hasAny = data.entries.some((e) => !e.deleted_at)
+  const pend = useMemo(() => unsettled(data.entries, today), [data.entries, today])
+  const pendOut = pend.reduce((a, e) => a + (e.kind === 'out' ? e.amount : 0), 0)
   const cat = (id: string) => data.categories.find((c) => c.id === id)
 
   // 跟上個月同一天比（上個月沒那麼多天就比到月底）
@@ -65,6 +70,17 @@ export function HomePage({
           <span className="num">{t.net < 0 ? '−' : ''}{fmt(t.net)}</span>
         </div>
       </section>
+
+      {pend.length > 0 && (
+        <button type="button" className="card settle-mini" onClick={onSettle} aria-label={`還沒結算，累計支出 ${fmt(pendOut)} 元，${pend.length} 筆，看結算`}>
+          <span className="er-text">
+            <span className="sm-label">還沒結算・累計支出</span>
+            <span className="note">{pend.length} 筆{data.settlements[0] ? `・第 ${data.settlements[0].no} 次結算之後` : ''}</span>
+          </span>
+          <span className="num sm-amt">{fmt(pendOut)}</span>
+          <UiIcon name="chevR" size={18} />
+        </button>
+      )}
 
       {!hasAny ? (
         <section className="card empty">

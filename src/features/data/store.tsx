@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { AppError } from './errors'
-import type { Category, Entry, Kind, Member, Rule } from '../../lib/types'
+import type { Category, Entry, Kind, Member, Rule, Settlement } from '../../lib/types'
 import { taipeiToday } from '../../lib/dates'
 import { notifyLine } from '../line/api'
 
@@ -12,6 +12,7 @@ export type Data = {
   categories: Category[]
   rules: Rule[]
   entries: Entry[]
+  settlements: Settlement[]
   loadedAt: string
 }
 
@@ -30,7 +31,7 @@ export type EntryInput = {
   note: string
 }
 
-const CACHE_KEY = 'home-ledger-cache-v1'
+const CACHE_KEY = 'home-ledger-cache-v2'
 
 function readCache(userId: string): Data | null {
   try {
@@ -63,10 +64,11 @@ async function fetchAll(userId: string): Promise<Data | null> {
   if (!me) return null
   // 每月固定先補上這個月的（兩支手機同時打開也不會重複）
   await must(supabase.rpc('hl_run_rules', { p_today: taipeiToday() }))
-  const [categories, rules, entries] = await Promise.all([
+  const [categories, rules, entries, settlements] = await Promise.all([
     must(supabase.from('hl_categories').select('id,kind,name,icon,color,sort,hidden').order('sort')),
     must(supabase.from('hl_rules').select('id,kind,amount,title,category_id,dom,start_day,stopped_at').order('dom')),
     must(supabase.from('hl_entries').select('*').order('day', { ascending: false })),
+    must(supabase.from('hl_settlements').select('id,no,upto,out_total,in_total,n,created_by,created_at').is('voided_at', null).order('no', { ascending: false })),
   ])
   return {
     me,
@@ -74,6 +76,7 @@ async function fetchAll(userId: string): Promise<Data | null> {
     categories: categories as Category[],
     rules: rules as Rule[],
     entries: entries as Entry[],
+    settlements: (settlements as Settlement[]).map((x) => ({ ...x, out_total: Number(x.out_total), in_total: Number(x.in_total) })),
     loadedAt: new Date().toISOString(),
   }
 }
@@ -134,6 +137,7 @@ function useLedger(session: Session) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_entries' }, later)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_categories' }, later)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_rules' }, later)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_settlements' }, later)
       .subscribe()
     const onVisible = () => document.visibilityState === 'visible' && later()
     document.addEventListener('visibilitychange', onVisible)
@@ -184,6 +188,17 @@ function useLedger(session: Session) {
               .eq('id', entry.rule_id),
           )
         }
+        await refresh()
+      },
+      async settle(upto: string) {
+        guard()
+        const r = await must(supabase.rpc('hl_settle', { p_upto: upto }))
+        await refresh()
+        return r as { id: string; no: number; out_total: number; in_total: number; n: number }
+      },
+      async unsettle(id: string) {
+        guard()
+        await must(supabase.rpc('hl_unsettle', { p_id: id }))
         await refresh()
       },
       async deleteEntry(id: string) {

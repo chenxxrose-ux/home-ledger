@@ -117,3 +117,8 @@ export function short(n: number): string {
   if (n >= 10000) return `${(Math.round(n / 1000) / 10).toString()}萬`
   return n.toLocaleString('en-US')
 }
+
+/** 還沒結算的（到 upto 那天為止） */
+export function unsettled(entries: Entry[], upto: string): Entry[] {
+  return sortEntries(entries.filter((e) => live(e) && !e.settlement_id && e.day <= upto))
+}

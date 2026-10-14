@@ -229,7 +229,7 @@ legend.sec { margin-bottom: 8px; }
 /* 底部頁籤 */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--card); border-top: 1px solid var(--hair);
-  padding: 4px max(8px, calc((100% - 480px) / 2)) var(--safe-bottom); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 4px max(8px, calc((100% - 480px) / 2)) var(--safe-bottom); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 .tabbar button { min-height: 54px; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; color: var(--muted); }
 .tabbar button[aria-current='page'] { color: var(--out); font-weight: 700; }
@@ -261,3 +261,22 @@ legend.sec { margin-bottom: 8px; }
 .field .row-label { font-size: 15px; }
 .line-tips { display: flex; flex-direction: column; gap: 4px; }
 a.btn { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+
+/* 結算 */
+.settle-hero { padding: 18px; display: flex; flex-direction: column; gap: 6px; }
+.sh-label { font-size: 14px; color: var(--sub); }
+.sh-amt { font-size: 36px; font-weight: 800; color: var(--out); line-height: 1.1; }
+.settle-hero .btn { margin-top: 8px; }
+.settle-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 60px; padding: 8px 0; border: 0; background: none; text-align: left; color: var(--ink); }
+.settle-row .er-title { font-size: 15px; font-weight: 600; }
+.settle-amt { font-size: 16px; font-weight: 700; }
+.settle-row svg { color: var(--muted); flex: none; }
+.settle-total { display: flex; align-items: baseline; justify-content: space-between; font-size: 14px; color: var(--sub); }
+.settle-total b { font-size: 26px; color: var(--out); }
+.confirm-text { margin: 0; font-size: 16px; line-height: 1.6; }
+.er-end { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.sheet-list { box-shadow: inset 0 0 0 1px var(--hair); }
+.settle-mini { display: flex; align-items: center; gap: 10px; width: 100%; padding: 14px 16px; border: 0; text-align: left; color: var(--ink); }
+.settle-mini .sm-label { font-size: 15px; font-weight: 600; }
+.settle-mini .sm-amt { font-size: 22px; font-weight: 800; color: var(--out); }
+.settle-mini svg { color: var(--muted); flex: none; }
