@@ -157,9 +157,11 @@ end $$;
 alter table public.hl_members enable row level security;
 create policy hl_members_read on public.hl_members for select to authenticated using (public.hl_is_member());
 grant select on public.hl_members to authenticated;
-revoke execute on function public.hl_is_member() from public;
-revoke execute on function public.hl_run_rules(date) from public;
-revoke execute on function public.hl_add_entry(uuid, text, integer, text, uuid, date, text, boolean) from public;
+-- Supabase 預設會把新函式、新表開給 anon（沒登入的人），這裡收回
+revoke execute on function public.hl_is_member() from public, anon;
+revoke execute on function public.hl_run_rules(date) from public, anon;
+revoke execute on function public.hl_add_entry(uuid, text, integer, text, uuid, date, text, boolean) from public, anon;
+revoke all on public.hl_members, public.hl_categories, public.hl_rules, public.hl_entries from anon;
 grant execute on function public.hl_add_entry(uuid, text, integer, text, uuid, date, text, boolean) to authenticated;
 grant execute on function public.hl_is_member() to authenticated;
 grant execute on function public.hl_run_rules(date) to authenticated;
