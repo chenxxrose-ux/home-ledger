@@ -170,6 +170,38 @@ test('設定：每月固定、分類', async () => {
   await expect(bao.locator('.cat-edit-row', { hasText: '寵物' })).toBeVisible()
 })
 
+test('LINE 群組：設定機器人、配對，記一筆就傳到群組', async () => {
+  const section = bao.getByRole('region', { name: 'LINE 群組' })
+  await section.scrollIntoViewIfNeeded()
+  await expect(section).toContainText('還沒設定')
+  await section.getByRole('button', { name: '設定 LINE 機器人' }).click()
+  const sheet = bao.getByRole('dialog', { name: '設定 LINE 機器人' })
+  await sheet.getByRole('button', { name: '儲存' }).click()
+  await expect(sheet.getByRole('alert')).toHaveText('請貼上 Channel secret')
+  await sheet.getByLabel(/Channel secret/).fill('abc')
+  await sheet.getByLabel(/Channel access token/).fill('x'.repeat(150))
+  await sheet.getByRole('button', { name: '儲存' }).click()
+  await expect(sheet.getByRole('alert')).toContainText('32 個英文和數字')
+  await expect(sheet.getByLabel(/Channel access token/)).toHaveValue('x'.repeat(150))
+  await sheet.getByLabel(/Channel secret/).fill('b'.repeat(32))
+  await shot(bao, '09-LINE-設定')
+  await sheet.getByRole('button', { name: '儲存' }).click()
+  await expect(sheet).toBeHidden()
+  await expect(section).toContainText('機器人「偶們家記帳」準備好了')
+  await section.getByRole('button', { name: '產生配對碼' }).click()
+  await expect(section.getByLabel(/配對碼/)).toHaveText('123456')
+  await shot(bao, '10-LINE-配對')
+  await fetch(`${MOCK}/__test/line`, { method: 'POST', body: JSON.stringify({ pair: true }) })
+  await expect(section).toContainText('已連上「偶們家」', { timeout: 10000 })
+  await shot(bao, '11-LINE-已連上')
+
+  await bao.getByRole('button', { name: '主畫面' }).click()
+  await add(bao, { amount: '65', title: '飲料', cat: '餐飲' })
+  await expect.poll(async () => (await (await fetch(`${MOCK}/__test/line`, { method: 'POST', body: '{}' })).json()).sent.length).toBe(1)
+  const sent = (await (await fetch(`${MOCK}/__test/line`, { method: 'POST', body: '{}' })).json()).sent
+  expect(sent[0]).toMatchObject({ by: '阿寶', amount: 65, title: '飲料' })
+})
+
 test('離線時看得到資料，但不能記帳', async () => {
   await bao.getByRole('button', { name: '主畫面' }).click()
   await baoCtx.setOffline(true)

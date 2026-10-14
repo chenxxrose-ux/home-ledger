@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import { AppError } from './errors'
 import type { Category, Entry, Kind, Member, Rule } from '../../lib/types'
 import { taipeiToday } from '../../lib/dates'
+import { notifyLine } from '../line/api'
 
 export type Data = {
   me: Member
@@ -167,6 +168,7 @@ function useLedger(session: Session) {
             p_repeat: repeat,
           }),
         )
+        notifyLine(id)
         await refresh()
         return id
       },

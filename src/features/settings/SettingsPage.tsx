@@ -7,6 +7,7 @@ import { CatIcon, COLOR_KEYS, COLOR_LABEL, COLORS, Icon, ICON_KEYS, ICON_LABEL, 
 import { fmt } from '../../lib/money'
 import { deviceHasPasskey, passkeySupported, registerFaceId } from '../auth/passkey'
 import type { Category, Kind } from '../../lib/types'
+import { LineSection } from '../line/LineSection'
 
 export function SettingsPage() {
   const data = useData()
@@ -118,13 +119,7 @@ export function SettingsPage() {
         </div>
       </section>
 
-      <section aria-label="LINE 群組">
-        <h2 className="sec">LINE 群組</h2>
-        <div className="card pad">
-          <p className="row-label grow">尚未開放</p>
-          <p className="note">之後會接上你們兩個人的 LINE 群組：記一筆群組就收到，在群組打「晚餐 320」也能記帳。</p>
-        </div>
-      </section>
+      <LineSection />
 
       <Account me={data.me.name} />
 
@@ -141,7 +136,7 @@ function Account({ me }: { me: string }) {
     <section aria-label="帳號">
       <h2 className="sec">帳號</h2>
       <div className="card pad stack">
-        <p className="row-label">目前登入：{me}</p>
+        <p className="row-label grow">目前登入：{me}</p>
         {passkeySupported() &&
           (has ? (
             <p className="note">這支手機已設定 Face ID 登入。</p>
