@@ -16,15 +16,26 @@ export function SettlePage({ onOpen }: { onOpen: (e: Entry) => void }) {
   const today = taipeiToday()
   const [confirm, setConfirm] = useState(false)
   const [viewing, setViewing] = useState<Settlement | null>(null)
-  // 從 LINE 結算卡片點進來（#settle/<id>）→ 直接打開那一次
+  // 從 LINE 結算卡片點進來（#settle/<id>）→ 直接打開那一次（網站已經開著也一樣）。
+  // 剛打開時畫面可能還是上次存的資料，等最新的結算紀錄載入後才找得到
+  const [want, setWant] = useState<string | null>(null)
   useEffect(() => {
-    const m = /^#settle\/([0-9a-f-]{36})$/.exec(location.hash)
-    if (!m) return
-    history.replaceState(null, '', '#settle')
-    const s = data.settlements.find((x) => x.id === m[1])
-    if (s) setViewing(s)
-    else toast({ text: '這次結算已經復原了，帳都回到「還沒結算」' })
+    const read = () => {
+      const m = /^#settle\/([0-9a-f-]{36})$/.exec(location.hash)
+      if (!m) return
+      history.replaceState(null, '', '#settle')
+      setWant(m[1])
+    }
+    read()
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
   }, [])
+  useEffect(() => {
+    const s = want && data.settlements.find((x) => x.id === want)
+    if (!s) return
+    setViewing(s)
+    setWant(null)
+  }, [want, data.settlements])
   const { busy, error, submit } = useSubmit()
   const list = useMemo(() => unsettled(data.entries, today), [data.entries, today])
   const out = list.filter((e) => e.kind === 'out').reduce((a, e) => a + e.amount, 0)
