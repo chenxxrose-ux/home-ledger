@@ -1,13 +1,15 @@
 // 偶們家記帳：LINE 機器人（阿寶和草莓的群組，跟滷味的機器人分開）
 // 網站打來的（要登入、而且是 hl_members 才可以）：
 //   status 狀態、setup 貼 Channel secret／access token、pair 產生 6 位數配對碼、unlink 解除、
-//   notify_set 開關「每記一筆就傳」、notify 記了一筆後傳到群組（同一筆只會傳一次）
+//   notify_set 開關「每記一筆就傳」、notify 記了一筆後傳到群組（同一筆只會傳一次）、
+//   changed 傳過的那筆改了／刪了 → 補一則更正、settled 結算完傳一張結算卡片、unsettled 結算復原
 // LINE 打來的 Webhook（用 Channel secret 驗簽章）：
 //   群組裡傳配對碼 → 綁定；打「晚餐 320」→ 記一筆並回覆（回覆不算免費則數）；
 //   「本月」看這個月；「取消」刪掉剛剛在群組記的那筆；「說明」看用法
 // 資料庫排程每月 1 號打 op=monthly（帶只存在資料庫裡的 cron_key）→ 上個月總結
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fmt, parseLine, type Cat } from "./parse.ts";
+import { settleFlex } from "./flex.ts";
 
 const ORIGINS = ["https://chenxxrose-ux.github.io", "http://localhost:5173", "http://localhost:4173"];
 const API = "https://api.line.me/v2/bot";
@@ -52,8 +54,16 @@ async function line(token: string, path: string, init: RequestInit = {}) {
 }
 const say = (token: string, replyToken: string, text: string) =>
   line(token, "/message/reply", { method: "POST", body: JSON.stringify({ replyToken, messages: [{ type: "text", text }] }) });
-const push = (token: string, to: string, text: string, retryKey: string) =>
-  line(token, "/message/push", { method: "POST", body: JSON.stringify({ to, messages: [{ type: "text", text }] }), headers: { "X-Line-Retry-Key": retryKey } });
+const pushMsgs = (token: string, to: string, messages: unknown[], retryKey: string) =>
+  line(token, "/message/push", { method: "POST", body: JSON.stringify({ to, messages }), headers: { "X-Line-Retry-Key": retryKey } });
+const push = (token: string, to: string, text: string, retryKey: string) => pushMsgs(token, to, [{ type: "text", text }], retryKey);
+// 傳出去的結果 → 給網站看的
+function result(r: { ok: boolean; status: number; j: unknown }) {
+  if (r.status === 409) return { sent: true, dup: true };
+  if (r.status === 429) return { sent: false, why: "quota" };
+  if (!r.ok) { console.error("push", r.status, r.j); return { sent: false, why: "line " + r.status }; }
+  return { sent: true };
+}
 
 async function quota(token: string) {
   const [q, c] = await Promise.all([line(token, "/message/quota"), line(token, "/message/quota/consumption")]);
@@ -219,11 +229,68 @@ async function notify(cfg: Cfg, me: { id: string; name: string }, id: string) {
     dayLabel(e.day),
     `${m} 月支出 ${fmt(sum(rows, "out"))}・收入 ${fmt(sum(rows, "in"))}`,
   ].join("\n");
-  const r = await push(cfg.token, cfg.group, text, e.id);
-  if (r.status === 409) return { sent: true, dup: true };
-  if (r.status === 429) return { sent: false, why: "quota" };
-  if (!r.ok) { console.error("push", r.status, r.j); return { sent: false, why: "line " + r.status }; }
-  return { sent: true };
+  const out = result(await push(cfg.token, cfg.group, text, e.id));
+  if (out.sent) await db.from("hl_entries").update({ line_sent_at: new Date().toISOString() }).eq("id", e.id);
+  return out;
+}
+
+const entryLabel = (cats: Cat[], e: { category_id: string; title: string }) => {
+  const c = cats.find((x) => x.id === e.category_id);
+  return `${c?.name || ""}${e.title && e.title !== c?.name ? "・" + e.title : ""}`;
+};
+
+// 傳到群組過（或在群組記）的那筆，在網站改了或刪了 → 補一則更正（訊息收不回來）
+type Before = { kind: string; amount: number; title: string; category_id: string; day: string };
+async function changed(cfg: Cfg, me: { id: string; name: string }, id: string, before: Before | null) {
+  if (!cfg.token || !cfg.group) return { sent: false };
+  const { data: e } = await db.from("hl_entries").select("id,kind,amount,title,category_id,day,via,line_sent_at,deleted_at,updated_at").eq("id", id).maybeSingle();
+  if (!e || (!e.line_sent_at && e.via !== "line") || Date.now() - Date.parse(e.updated_at) > 10 * 60 * 1000) return { sent: false };
+  const cats = await categories();
+  const kind = (k: string) => (k === "in" ? "收入" : "支出");
+  let text: string;
+  if (e.deleted_at) {
+    text = `🗑 ${me.name}刪掉了一筆${kind(e.kind)}\n${entryLabel(cats, e)}　${fmt(e.amount)} 元（${dayLabel(e.day)}）`;
+  } else {
+    if (!before) return { sent: false };
+    const diff: string[] = [];
+    if (before.day !== e.day) diff.push(`日期　${dayLabel(before.day)} → ${dayLabel(e.day)}`);
+    if (before.amount !== e.amount) diff.push(`金額　${fmt(before.amount)} → ${fmt(e.amount)} 元`);
+    if (before.kind !== e.kind) diff.push(`${kind(before.kind)} → ${kind(e.kind)}`);
+    if (before.category_id !== e.category_id || before.title !== e.title) diff.push(`名稱　${entryLabel(cats, before)} → ${entryLabel(cats, e)}`);
+    if (!diff.length) return { sent: false };
+    text = [`✏️ ${me.name}改了一筆${kind(e.kind)}`, `${entryLabel(cats, e)}　${fmt(e.amount)} 元`, ...diff, "以網站上的為準"].join("\n");
+  }
+  return result(await push(cfg.token, cfg.group, text, await retryKey(`changed/${id}/${e.updated_at}`)));
+}
+
+// 結算完 → 傳一張結算卡片到群組（只有剛剛按結算的人能叫它傳，同一次只傳一次）
+async function settled(cfg: Cfg, me: { id: string; name: string }, id: string) {
+  if (!cfg.token || !cfg.group) return { sent: false };
+  const { data: s } = await db.from("hl_settlements").select("id,no,upto,out_total,in_total,n,created_by,created_at,voided_at").eq("id", id).maybeSingle();
+  if (!s || s.voided_at || s.created_by !== me.id || Date.now() - Date.parse(s.created_at) > 10 * 60 * 1000) return { sent: false };
+  const [{ data: rows }, cats] = await Promise.all([
+    db.from("hl_entries").select("kind,amount,category_id,day").eq("settlement_id", id).is("deleted_at", null),
+    categories(),
+  ]);
+  const list = (rows || []) as (Row & { day: string })[];
+  const by = new Map<string, number>();
+  for (const r of list) if (r.kind === "out") by.set(r.category_id, (by.get(r.category_id) || 0) + r.amount);
+  const top = [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([cid, amount]) => ({ name: cats.find((c) => c.id === cid)?.name || "其他", amount }));
+  const from = list.map((r) => r.day).sort()[0] || null;
+  const settledOn = new Date(Date.parse(s.created_at) + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const msg = settleFlex(
+    { id, no: s.no, by: me.name, settledOn, from, upto: s.upto, n: s.n, out: Number(s.out_total), inc: Number(s.in_total), top },
+    SITE, `${SITE}line-settle.png`,
+  );
+  return result(await pushMsgs(cfg.token, cfg.group, [msg], await retryKey(`settled/${id}`)));
+}
+
+async function unsettled(cfg: Cfg, me: { id: string; name: string }, id: string) {
+  if (!cfg.token || !cfg.group) return { sent: false };
+  const { data: s } = await db.from("hl_settlements").select("no,n,voided_at").eq("id", id).maybeSingle();
+  if (!s?.voided_at || Date.now() - Date.parse(s.voided_at) > 10 * 60 * 1000) return { sent: false };
+  const text = `↩️ ${me.name}把第 ${s.no} 次結算復原了\n那 ${s.n} 筆回到「還沒結算」，上面那張結算卡片不算。`;
+  return result(await push(cfg.token, cfg.group, text, await retryKey(`unsettled/${id}`)));
 }
 
 async function retryKey(s: string) {
@@ -289,6 +356,15 @@ Deno.serve(async (req) => {
     if (b.op === "notify") {
       if (typeof b.id !== "string" || !/^[0-9a-f-]{36}$/.test(b.id)) return json(req, { error: "bad id" }, 400);
       return json(req, await notify(cfg, me, b.id));
+    }
+    if (b.op === "changed" || b.op === "settled" || b.op === "unsettled") {
+      if (typeof b.id !== "string" || !/^[0-9a-f-]{36}$/.test(b.id)) return json(req, { error: "bad id" }, 400);
+      if (b.op === "settled") return json(req, await settled(cfg, me, b.id));
+      if (b.op === "unsettled") return json(req, await unsettled(cfg, me, b.id));
+      const p = b.before;
+      const before = p ? { kind: String(p.kind), amount: Number(p.amount), title: String(p.title ?? ""), category_id: String(p.category_id), day: String(p.day) } : null;
+      if (before && (!/^\d{4}-\d{2}-\d{2}$/.test(before.day) || !Number.isFinite(before.amount))) return json(req, { error: "bad before" }, 400);
+      return json(req, await changed(cfg, me, b.id, before));
     }
     return json(req, { error: "op" }, 400);
   } catch (e) {

@@ -132,6 +132,7 @@ const RPCS = {
   hl_add_entry: ['p_id', 'p_kind', 'p_amount', 'p_title', 'p_category', 'p_day', 'p_note', 'p_repeat'],
   hl_settle: ['p_upto'],
   hl_unsettle: ['p_id'],
+  hl_make_rule: ['p_entry', 'p_dom'],
 }
 
 async function handleRest(req, res, url, body, user) {
@@ -231,6 +232,22 @@ async function lineFn(res, b, user) {
     const e = r.rows[0]
     if (!line.group || !line.notify || !e || e.via !== 'app' || e.created_by !== user.id) return send(res, 200, { sent: false })
     line.sent.push({ id: e.id, by: user.name, amount: e.amount, title: e.title })
+    await serial(() => db.query(`update hl_entries set line_sent_at = now() where id = $1`, [b.id]))
+    return send(res, 200, { sent: true })
+  }
+  if (b.op === 'settled' || b.op === 'unsettled') {
+    const r = await serial(() => db.query(`select * from hl_settlements where id = $1`, [b.id]))
+    const s = r.rows[0]
+    if (!line.group || !s || (b.op === 'settled') === Boolean(s.voided_at)) return send(res, 200, { sent: false })
+    line.sent.push({ op: b.op, by: user.name, no: s.no, n: s.n, out: Number(s.out_total) })
+    return send(res, 200, { sent: true })
+  }
+  if (b.op === 'changed') {
+    const r = await serial(() => db.query(`select * from hl_entries where id = $1`, [b.id]))
+    const e = r.rows[0]
+    if (!line.group || !e || (!e.line_sent_at && e.via !== 'line')) return send(res, 200, { sent: false })
+    if (!e.deleted_at && (!b.before || (b.before.day === e.day && b.before.amount === e.amount && b.before.title === e.title))) return send(res, 200, { sent: false })
+    line.sent.push({ op: 'changed', by: user.name, id: e.id, deleted: Boolean(e.deleted_at), from: b.before?.day, to: e.day })
     return send(res, 200, { sent: true })
   }
   send(res, 400, { error: 'op' })

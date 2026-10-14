@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useData, useStore } from '../data/store'
 import { ErrorNote, Sheet, useSubmit, useToast } from '../../ui/kit'
 import { EntryRow } from '../shared/EntryRow'
@@ -16,6 +16,15 @@ export function SettlePage({ onOpen }: { onOpen: (e: Entry) => void }) {
   const today = taipeiToday()
   const [confirm, setConfirm] = useState(false)
   const [viewing, setViewing] = useState<Settlement | null>(null)
+  // 從 LINE 結算卡片點進來（#settle/<id>）→ 直接打開那一次
+  useEffect(() => {
+    const m = /^#settle\/([0-9a-f-]{36})$/.exec(location.hash)
+    if (!m) return
+    history.replaceState(null, '', '#settle')
+    const s = data.settlements.find((x) => x.id === m[1])
+    if (s) setViewing(s)
+    else toast({ text: '這次結算已經復原了，帳都回到「還沒結算」' })
+  }, [])
   const { busy, error, submit } = useSubmit()
   const list = useMemo(() => unsettled(data.entries, today), [data.entries, today])
   const out = list.filter((e) => e.kind === 'out').reduce((a, e) => a + e.amount, 0)

@@ -43,7 +43,7 @@ async function add(page: Page, o: { kind?: '支出' | '收入'; amount: string; 
   if (o.title) await sheet.getByLabel('名稱').fill(o.title)
   await sheet.getByRole('button', { name: o.cat, exact: true }).click()
   if (o.day) await sheet.getByLabel('日期').fill(o.day)
-  if (o.repeat) await sheet.getByLabel(/每月重複/).check()
+  if (o.repeat) await sheet.getByLabel(/每月固定/).check()
   await sheet.getByRole('button', { name: '記下來' }).click()
   await expect(sheet).toBeHidden()
 }
@@ -202,6 +202,38 @@ test('LINE 群組：設定機器人、配對，記一筆就傳到群組', async 
   expect(sent[0]).toMatchObject({ by: '阿寶', amount: 65, title: '飲料' })
 })
 
+const lineSent = async () => (await (await fetch(`${MOCK}/__test/line`, { method: 'POST', body: '{}' })).json()).sent as Record<string, unknown>[]
+
+test('改了傳過的那筆 → 群組補一則更正；可以設成每月固定、選幾號；分類可以自己新增', async () => {
+  const before = (await lineSent()).length
+  const d = ymd(y, m, 1)
+  await bao.locator('.entry-row', { hasText: '飲料' }).first().click()
+  const sheet = bao.getByRole('dialog', { name: '修改這一筆' })
+  await sheet.getByLabel('日期').fill(d)
+  // 自己新增一個分類，存好就選起來
+  await sheet.getByRole('button', { name: '新增', exact: true }).click()
+  const cs = bao.getByRole('dialog', { name: '新增支出分類' })
+  await cs.getByLabel('分類名稱').fill('手搖飲')
+  await cs.getByRole('button', { name: '飲料', exact: true }).click()
+  await cs.getByRole('button', { name: '儲存' }).click()
+  await expect(cs).toBeHidden()
+  await expect(sheet.getByRole('button', { name: '手搖飲' })).toHaveAttribute('aria-pressed', 'true')
+  // 每月固定，選 5 號
+  await sheet.getByLabel('每月固定支出').check()
+  await sheet.getByLabel('每月幾號').selectOption('5')
+  await expect(sheet).toContainText('下個月起每月 5 號自動記')
+  await shot(bao, '14-修改-每月固定')
+  await sheet.getByRole('button', { name: '儲存' }).click()
+  await expect(sheet).toBeHidden()
+  await expect(bao.getByRole('status').filter({ hasText: '每月 5 號自動記' })).toBeVisible()
+  const [r] = await sql<{ dom: number; start_day: string; cat: string }>(
+    `select r.dom, r.start_day::text, c.name as cat from hl_rules r join hl_entries e on e.rule_id = r.id join hl_categories c on c.id = r.category_id where e.title = '飲料'`,
+  )
+  expect(r).toMatchObject({ dom: 5, start_day: `${shiftMonth(month, 1)}-01`, cat: '手搖飲' })
+  await expect.poll(async () => (await lineSent()).length).toBe(before + 1)
+  expect((await lineSent()).at(-1)).toMatchObject({ op: 'changed', by: '阿寶', from: today, to: d })
+})
+
 test('結算：每一筆都累計，按結算變成第 1 次，可以復原', async () => {
   const [{ out, n }] = await sql<{ out: number; n: number }>(
     `select coalesce(sum(amount) filter (where kind = 'out'), 0)::int as out, count(*)::int as n from hl_entries where deleted_at is null and settlement_id is null and day <= $1`,
@@ -222,6 +254,8 @@ test('結算：每一筆都累計，按結算變成第 1 次，可以復原', as
   await expect(dlg).toBeHidden()
   await expect(bao.getByRole('status').filter({ hasText: '第 1 次結算完成' })).toBeVisible()
   await expect(hero.getByRole('button', { name: '沒有要結算的' })).toBeDisabled()
+  await expect.poll(async () => (await lineSent()).filter((x) => x.op === 'settled').length).toBe(1)
+  expect((await lineSent()).find((x) => x.op === 'settled')).toMatchObject({ by: '阿寶', no: 1, n, out })
   // 另一支手機也看得到
   await berry.getByRole('navigation', { name: '主選單' }).getByRole('button', { name: '結算' }).click()
   await expect(berry.getByRole('button', { name: /第 1 次結算/ })).toBeVisible({ timeout: 10000 })
@@ -230,6 +264,7 @@ test('結算：每一筆都累計，按結算變成第 1 次，可以復原', as
   await bao.getByRole('button', { name: '復原' }).click()
   await expect(hero.getByRole('button', { name: `結算這 ${n} 筆` })).toBeEnabled()
   await expect(bao.getByRole('button', { name: /第 1 次結算/ })).toHaveCount(0)
+  await expect.poll(async () => (await lineSent()).filter((x) => x.op === 'unsettled').length).toBe(1)
 
   // 再結算一次，打開明細
   await hero.getByRole('button', { name: `結算這 ${n} 筆` }).click()
@@ -240,6 +275,11 @@ test('結算：每一筆都累計，按結算變成第 1 次，可以復原', as
   await expect(detail.getByText('已結算').first()).toBeVisible()
   await shot(bao, '13-結算明細')
   await detail.getByRole('button', { name: '關閉' }).click()
+
+  // LINE 卡片的「看這次明細」→ 直接打開那一次
+  const [{ id }] = await sql<{ id: string }>(`select id from hl_settlements where voided_at is null`)
+  await berry.goto(`/?openExternalBrowser=1#settle/${id}`)
+  await expect(berry.getByRole('dialog', { name: /第 1 次結算｜/ })).toBeVisible()
 })
 
 test('離線時看得到資料，但不能記帳', async () => {
@@ -265,7 +305,7 @@ test('記一筆的畫面', async () => {
   await sheet.getByLabel('金額').fill('13800')
   await sheet.getByLabel('名稱').fill('房屋')
   await sheet.getByRole('button', { name: '住房', exact: true }).click()
-  await sheet.getByLabel(/每月重複/).check()
+  await sheet.getByLabel(/每月固定/).check()
   await shot(bao, '08-記一筆')
   await sheet.getByRole('button', { name: '取消' }).click()
 })

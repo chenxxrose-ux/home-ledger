@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 import { AppError } from './errors'
 import type { Category, Entry, Kind, Member, Rule, Settlement } from '../../lib/types'
 import { taipeiToday } from '../../lib/dates'
-import { notifyLine } from '../line/api'
+import { notifyLine, tellLine } from '../line/api'
 
 export type Data = {
   me: Member
@@ -157,7 +157,8 @@ function useLedger(session: Session) {
   const actions = useMemo(
     () => ({
       refresh,
-      async addEntry(input: EntryInput, repeat: boolean) {
+      /** repeatDom = 設成每月固定，每月幾號（null = 不重複） */
+      async addEntry(input: EntryInput, repeatDom: number | null) {
         guard()
         const id = crypto.randomUUID()
         await must(
@@ -169,17 +170,21 @@ function useLedger(session: Session) {
             p_category: input.category_id,
             p_day: input.day,
             p_note: input.note,
-            p_repeat: repeat,
+            p_repeat: false,
           }),
         )
+        if (repeatDom) await must(supabase.rpc('hl_make_rule', { p_entry: id, p_dom: repeatDom }))
         notifyLine(id)
         await refresh()
         return id
       },
       /** alsoRule = 以後每個月也一樣（只有每月固定的那筆會用到） */
-      async updateEntry(entry: Entry, input: EntryInput, alsoRule: boolean) {
+      async updateEntry(entry: Entry, input: EntryInput, alsoRule: boolean, repeatDom: number | null = null) {
         guard()
         await must(supabase.from('hl_entries').update(input).eq('id', entry.id))
+        const { kind, amount, title, category_id, day } = entry
+        tellLine({ op: 'changed', id: entry.id, before: { kind, amount, title, category_id, day } })
+        if (repeatDom && !entry.rule_id) await must(supabase.rpc('hl_make_rule', { p_entry: entry.id, p_dom: repeatDom }))
         if (alsoRule && entry.rule_id) {
           await must(
             supabase
@@ -192,18 +197,21 @@ function useLedger(session: Session) {
       },
       async settle(upto: string) {
         guard()
-        const r = await must(supabase.rpc('hl_settle', { p_upto: upto }))
+        const r = (await must(supabase.rpc('hl_settle', { p_upto: upto }))) as { id: string }
+        tellLine({ op: 'settled', id: r.id })
         await refresh()
-        return r as { id: string; no: number; out_total: number; in_total: number; n: number }
+        return r as unknown as { id: string; no: number; out_total: number; in_total: number; n: number }
       },
       async unsettle(id: string) {
         guard()
         await must(supabase.rpc('hl_unsettle', { p_id: id }))
+        tellLine({ op: 'unsettled', id })
         await refresh()
       },
       async deleteEntry(id: string) {
         guard()
         await must(supabase.from('hl_entries').update({ deleted_at: new Date().toISOString() }).eq('id', id))
+        tellLine({ op: 'changed', id })
         await refresh()
       },
       async restoreEntry(id: string) {
@@ -223,8 +231,10 @@ function useLedger(session: Session) {
       },
       async addCategory(c: { kind: Kind; name: string; icon: string; color: string; sort: number }) {
         guard()
-        await must(supabase.from('hl_categories').insert(c))
+        const id = crypto.randomUUID()
+        await must(supabase.from('hl_categories').insert({ id, ...c }))
         await refresh()
+        return id
       },
       async updateCategory(id: string, patch: Partial<Pick<Category, 'name' | 'icon' | 'color' | 'hidden'>>) {
         guard()

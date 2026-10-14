@@ -26,6 +26,7 @@ const TITLE: Record<Tab, string> = { home: '偶們家', list: '列表', chart: '
 
 function readTab(): Tab {
   const h = location.hash.replace('#', '')
+  if (h.startsWith('settle/')) return 'settle' // LINE 結算卡片的「看這次明細」
   return h === 'list' || h === 'chart' || h === 'settle' || h === 'settings' ? h : 'home'
 }
 
