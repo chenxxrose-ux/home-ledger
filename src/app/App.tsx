@@ -7,24 +7,26 @@ import { HomePage } from '../features/home/HomePage'
 import { ListPage } from '../features/list/ListPage'
 import { ChartPage } from '../features/chart/ChartPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
+import { SettlePage } from '../features/settle/SettlePage'
 import { EntryForm } from '../features/entry/EntryForm'
 import { ToastProvider } from '../ui/kit'
 import { UiIcon } from '../ui/icons'
 import { formatTaipeiTime, monthOf, taipeiToday } from '../lib/dates'
 import type { Entry, Kind } from '../lib/types'
 
-type Tab = 'home' | 'list' | 'chart' | 'settings'
-const TABS: { key: Tab; label: string; icon: 'homeTab' | 'list' | 'pie' | 'gear' }[] = [
+type Tab = 'home' | 'list' | 'chart' | 'settle' | 'settings'
+const TABS: { key: Tab; label: string; icon: 'homeTab' | 'list' | 'pie' | 'receipt' | 'gear' }[] = [
   { key: 'home', label: '主畫面', icon: 'homeTab' },
   { key: 'list', label: '列表', icon: 'list' },
   { key: 'chart', label: '圖表', icon: 'pie' },
+  { key: 'settle', label: '結算', icon: 'receipt' },
   { key: 'settings', label: '設定', icon: 'gear' },
 ]
-const TITLE: Record<Tab, string> = { home: '偶們家', list: '列表', chart: '圖表', settings: '設定' }
+const TITLE: Record<Tab, string> = { home: '偶們家', list: '列表', chart: '圖表', settle: '結算', settings: '設定' }
 
 function readTab(): Tab {
   const h = location.hash.replace('#', '')
-  return h === 'list' || h === 'chart' || h === 'settings' ? h : 'home'
+  return h === 'list' || h === 'chart' || h === 'settle' || h === 'settings' ? h : 'home'
 }
 
 export function App() {
@@ -122,12 +124,13 @@ function Shell() {
       {state.status === 'ready' && (
         <main>
           {tab === 'home' && (
-            <HomePage month={month} setMonth={setMonth} onAdd={(kind) => setForm({ kind })} onOpen={(entry) => setForm({ entry })} />
+            <HomePage month={month} setMonth={setMonth} onAdd={(kind) => setForm({ kind })} onOpen={(entry) => setForm({ entry })} onSettle={() => setTab('settle')} />
           )}
           {tab === 'list' && (
             <ListPage month={month} setMonth={setMonth} onOpen={(entry) => setForm({ entry })} onAddOn={(day) => setForm({ kind: 'out', day })} />
           )}
           {tab === 'chart' && <ChartPage month={month} setMonth={setMonth} />}
+          {tab === 'settle' && <SettlePage onOpen={(entry) => setForm({ entry })} />}
           {tab === 'settings' && <SettingsPage />}
         </main>
       )}

@@ -38,4 +38,16 @@ export type Entry = {
   deleted_at: string | null
   /** 在網站記的是 app，在 LINE 群組打字記的是 line */
   via?: 'app' | 'line'
+  settlement_id?: string | null
+}
+
+export type Settlement = {
+  id: string
+  no: number
+  upto: string
+  out_total: number
+  in_total: number
+  n: number
+  created_by: string | null
+  created_at: string
 }

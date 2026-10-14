@@ -15,7 +15,7 @@ const USERS = [
   { id: '00000000-0000-4000-8000-00000000000b', email: 'berry@test.local', name: '草莓', sort: 2 },
 ]
 
-const db = new PGlite({ parsers: { 1082: (v) => v } }) // date 欄位保持 YYYY-MM-DD 字串，與 PostgREST 相同
+const db = new PGlite({ parsers: { 1082: (v) => v, 20: (v) => Number(v) } }) // date 欄位保持 YYYY-MM-DD 字串，與 PostgREST 相同
 await db.exec(`
   create schema auth;
   create table auth.users (id uuid primary key, email text);
@@ -126,10 +126,12 @@ function parseQuery(url) {
   return { select, where: where.length ? ` where ${where.join(' and ')}` : '', params, order, limit }
 }
 
-const TABLES = new Set(['hl_members', 'hl_categories', 'hl_rules', 'hl_entries'])
+const TABLES = new Set(['hl_members', 'hl_categories', 'hl_rules', 'hl_entries', 'hl_settlements'])
 const RPCS = {
   hl_run_rules: ['p_today'],
   hl_add_entry: ['p_id', 'p_kind', 'p_amount', 'p_title', 'p_category', 'p_day', 'p_note', 'p_repeat'],
+  hl_settle: ['p_upto'],
+  hl_unsettle: ['p_id'],
 }
 
 async function handleRest(req, res, url, body, user) {

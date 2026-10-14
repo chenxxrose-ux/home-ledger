@@ -80,6 +80,7 @@ const UI: Record<string, string> = {
   check: 'M5 12.5l4.5 4.5L19 7.5',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   line: 'M4 5h16v11H9l-5 4z',
+  receipt: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
 }
 
 export function UiIcon({ name, size = 22, width = 2 }: { name: keyof typeof UI; size?: number; width?: number }) {

@@ -3,7 +3,7 @@ import { CatIcon, UiIcon } from '../../ui/icons'
 import { fmt } from '../../lib/money'
 
 /** 一筆帳：圖示、名稱（沒填就用分類）、分類／備註、金額 */
-export function EntryRow({ entry, category, sub, onOpen }: { entry: Entry; category?: Category; sub?: string; onOpen: () => void }) {
+export function EntryRow({ entry, category, sub, tag, onOpen }: { entry: Entry; category?: Category; sub?: string; tag?: string; onOpen: () => void }) {
   const name = entry.title || category?.name || '未分類'
   const detail = [sub, entry.title && entry.title !== category?.name ? category?.name : '', entry.note].filter(Boolean).join('・')
   return (
@@ -20,9 +20,12 @@ export function EntryRow({ entry, category, sub, onOpen }: { entry: Entry; categ
         </span>
         {detail && <span className="er-sub">{detail}</span>}
       </span>
-      <span className={`er-amt num ${entry.kind}`}>
-        {entry.kind === 'in' ? '+' : ''}
-        {fmt(entry.amount)}
+      <span className="er-end">
+        <span className={`er-amt num ${entry.kind}`}>
+          {entry.kind === 'in' ? '+' : ''}
+          {fmt(entry.amount)}
+        </span>
+        {tag && <span className="tag">{tag}</span>}
       </span>
     </button>
   )

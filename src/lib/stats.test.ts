@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { byCategory, calendar, cumulative, dailyNet, inMonth, percents, short, totals } from './stats'
+import { byCategory, calendar, cumulative, dailyNet, inMonth, percents, short, totals, unsettled } from './stats'
 import type { Category, Entry } from './types'
 
 const cat = (id: string, sort = 0): Category => ({ id, kind: 'out', name: id, icon: 'dots', color: 'gray', sort, hidden: false })
@@ -71,5 +71,19 @@ describe('stats', () => {
     expect(short(999)).toBe('999')
     expect(short(25195)).toBe('2.5萬')
     expect(short(146453)).toBe('15萬')
+  })
+})
+
+describe('結算', () => {
+  const base = { title: '', note: '', rule_id: null, created_by: null, created_at: '2026-10-01T00:00:00Z', updated_at: '', category_id: 'c', kind: 'out' as const }
+  const es: Entry[] = [
+    { ...base, id: '1', amount: 11100, day: '2026-10-28', deleted_at: null },
+    { ...base, id: '2', amount: 754, day: '2026-10-05', deleted_at: null },
+    { ...base, id: '3', amount: 180, day: '2026-10-03', deleted_at: null },
+    { ...base, id: '4', amount: 99, day: '2026-10-02', deleted_at: null, settlement_id: 's1' },
+    { ...base, id: '5', amount: 50, day: '2026-10-01', deleted_at: '2026-10-02T00:00:00Z' },
+  ]
+  it('累計到今天為止、還沒結算、沒刪掉的', () => {
+    expect(unsettled(es, '2026-10-14').map((e) => e.id)).toEqual(['2', '3'])
   })
 })
