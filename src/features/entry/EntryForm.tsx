@@ -6,6 +6,7 @@ import { CatIcon, UiIcon } from '../../ui/icons'
 import { formatTyping, parseAmount } from '../../lib/money'
 import { formatDay, taipeiToday } from '../../lib/dates'
 import type { Entry, Kind } from '../../lib/types'
+import { CategorySheet } from '../settings/CategorySheet'
 
 /** 記一筆／修改一筆。entry 有值 = 修改 */
 export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: Kind; entry?: Entry; day?: string; onClose: () => void }) {
@@ -22,6 +23,10 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
   const [date, setDate] = useState(entry?.day ?? day ?? today)
   const [note, setNote] = useState(entry?.note ?? '')
   const [repeat, setRepeat] = useState(false)
+  // 每月幾號：沒特別選就跟著日期
+  const [pickedDom, setDom] = useState<number | null>(null)
+  const dom = pickedDom ?? Number(date.slice(8))
+  const [newCat, setNewCat] = useState(false)
   const rule = entry?.rule_id ? data.rules.find((r) => r.id === entry.rule_id) : undefined
   const [alsoRule, setAlsoRule] = useState(true)
 
@@ -45,11 +50,11 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new AppError('請選日期', 'validation')
       const input = { kind, amount: n, title: title.trim(), category_id: catId, day: date, note: note.trim() }
       if (entry) {
-        await actions.updateEntry(entry, input, Boolean(rule && rule.stopped_at == null && alsoRule))
-        toast({ text: '已修改' })
+        await actions.updateEntry(entry, input, Boolean(rule && rule.stopped_at == null && alsoRule), repeat ? dom : null)
+        toast({ text: repeat ? `已設成每月固定，從下個月起每月 ${dom} 號自動記` : '已修改' })
       } else {
-        await actions.addEntry(input, repeat)
-        toast({ text: repeat ? `已記下來，之後每月 ${Number(date.slice(8))} 號自動記一筆` : '已記下來' })
+        await actions.addEntry(input, repeat ? dom : null)
+        toast({ text: repeat ? `已記下來，從下個月起每月 ${dom} 號自動記` : '已記下來' })
       }
     })
     if (ok) onClose()
@@ -139,6 +144,12 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
                 <span>{c.name}</span>
               </button>
             ))}
+            <button type="button" className="cat-btn cat-add" onClick={() => setNewCat(true)}>
+              <span className="cat-ic">
+                <UiIcon name="plus" size={22} />
+              </span>
+              <span>新增</span>
+            </button>
           </div>
         </fieldset>
 
@@ -153,13 +164,31 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
               </span>
             </span>
           </label>
-          {!entry && (
+          {!rule && (
             <label className="row">
               <span className="row-label grow">
-                每月重複
-                <small>{repeat ? `每月 ${Number(date.slice(8))} 號自動記一筆（房貸、車貸、保險…）` : '房貸、車貸、保險這種每個月都有的'}</small>
+                每月固定{kind === 'out' ? '支出' : '收入'}
+                <small>{repeat ? `這筆算這個月的，下個月起每月 ${dom} 號自動記` : kind === 'out' ? '房貸、分期、保險這種每個月都有的' : '薪水這種每個月都有的'}</small>
               </span>
               <input type="checkbox" className="switch" checked={repeat} onChange={(e) => setRepeat(e.target.checked)} />
+            </label>
+          )}
+          {!rule && repeat && (
+            <label className="row">
+              <span className="row-label">每月</span>
+              <span className="row-value">
+                <select className="dom-in" value={dom} onChange={(e) => setDom(Number(e.target.value))} aria-label="每月幾號">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                    <option key={d} value={d}>
+                      {d} 號{d >= 29 ? '（小月記在月底）' : ''}
+                    </option>
+                  ))}
+                </select>
+                <span className="date-text" aria-hidden="true">
+                  {dom} 號
+                </span>
+                <UiIcon name="down" size={16} />
+              </span>
             </label>
           )}
           {rule && (
@@ -203,6 +232,17 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
           )}
         </div>
       </form>
+      {newCat && (
+        <CategorySheet
+          kind={kind}
+          category={null}
+          onClose={() => setNewCat(false)}
+          onSaved={(id) => {
+            setCatId(id)
+            setError(null)
+          }}
+        />
+      )}
     </Sheet>
   )
 }

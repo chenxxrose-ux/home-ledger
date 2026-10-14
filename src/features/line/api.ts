@@ -39,5 +39,11 @@ export async function lineCall<T>(body: Record<string, unknown>): Promise<T> {
 
 /** 記了一筆 → 傳到群組（失敗不影響記帳） */
 export function notifyLine(id: string) {
-  void supabase.functions.invoke('hl-line', { body: { op: 'notify', id } }).catch(() => undefined)
+  tellLine({ op: 'notify', id })
+}
+
+/** 結算、復原、改了傳過的那筆 → 跟群組說（沒連群組、沒傳過的，伺服器會自己略過） */
+export function tellLine(body: { op: 'notify' | 'settled' | 'unsettled' | 'changed'; id: string; before?: unknown }) {
+  if (!navigator.onLine) return
+  void supabase.functions.invoke('hl-line', { body }).catch(() => undefined)
 }
