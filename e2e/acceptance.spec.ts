@@ -223,7 +223,7 @@ test('結算：每一筆都累計，按結算變成第 1 次，可以復原', as
   await expect(bao.getByRole('status').filter({ hasText: '第 1 次結算完成' })).toBeVisible()
   await expect(hero.getByRole('button', { name: '沒有要結算的' })).toBeDisabled()
   // 另一支手機也看得到
-  await berry.getByRole('button', { name: '結算' }).click()
+  await berry.getByRole('navigation', { name: '主選單' }).getByRole('button', { name: '結算' }).click()
   await expect(berry.getByRole('button', { name: /第 1 次結算/ })).toBeVisible({ timeout: 10000 })
 
   // 復原 → 又回到還沒結算
