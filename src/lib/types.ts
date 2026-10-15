@@ -41,6 +41,19 @@ export type Entry = {
   settlement_id?: string | null
   /** 待繳：先記起來、還沒繳 */
   todo?: boolean
+  /** 媽媽代繳：媽媽先幫忙繳的，累計欠媽媽多少 */
+  mom?: boolean
+  /** 還給媽媽了（哪一次） */
+  mom_repay_id?: string | null
+}
+
+/** 還給媽媽的紀錄 */
+export type MomRepay = {
+  id: string
+  amount: number
+  n: number
+  created_by: string | null
+  created_at: string
 }
 
 export type Settlement = {

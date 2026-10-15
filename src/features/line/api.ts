@@ -43,7 +43,7 @@ export function notifyLine(id: string) {
 }
 
 /** 結算、復原、改了傳過的那筆 → 跟群組說（沒連群組、沒傳過的，伺服器會自己略過） */
-export function tellLine(body: { op: 'notify' | 'settled' | 'unsettled' | 'changed'; id: string; before?: unknown }) {
+export function tellLine(body: { op: 'notify' | 'settled' | 'unsettled' | 'changed' | 'mom' | 'mom_repaid' | 'mom_unrepaid'; id: string; before?: unknown }) {
   if (!navigator.onLine) return
   void supabase.functions.invoke('hl-line', { body }).catch(() => undefined)
 }

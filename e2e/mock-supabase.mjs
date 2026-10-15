@@ -126,13 +126,21 @@ function parseQuery(url) {
   return { select, where: where.length ? ` where ${where.join(' and ')}` : '', params, order, limit }
 }
 
-const TABLES = new Set(['hl_members', 'hl_categories', 'hl_rules', 'hl_entries', 'hl_settlements'])
+const TABLES = new Set(['hl_members', 'hl_categories', 'hl_rules', 'hl_entries', 'hl_settlements', 'hl_mom_repays'])
 const RPCS = {
   hl_run_rules: ['p_today'],
   hl_add_entry: ['p_id', 'p_kind', 'p_amount', 'p_title', 'p_category', 'p_day', 'p_note', 'p_repeat'],
   hl_settle: ['p_upto'],
   hl_unsettle: ['p_id'],
   hl_make_rule: ['p_entry', 'p_dom'],
+  hl_mom_repay: [],
+  hl_mom_unrepay: ['p_id'],
+}
+
+// 欠媽媽累計（還沒還的媽媽代繳）
+async function owed() {
+  const r = await serial(() => db.query(`select coalesce(sum(amount), 0)::int as t from hl_entries where mom and kind = 'out' and mom_repay_id is null and deleted_at is null`))
+  return r.rows[0].t
 }
 
 async function handleRest(req, res, url, body, user) {
@@ -231,7 +239,7 @@ async function lineFn(res, b, user) {
     const r = await serial(() => db.query(`select * from hl_entries where id = $1`, [b.id]))
     const e = r.rows[0]
     if (!line.group || !line.notify || !e || e.via !== 'app' || e.created_by !== user.id) return send(res, 200, { sent: false })
-    line.sent.push({ id: e.id, by: user.name, amount: e.amount, title: e.title })
+    line.sent.push({ id: e.id, by: user.name, amount: e.amount, title: e.title, ...(e.mom ? { op: 'mom', owed: await owed() } : {}) })
     await serial(() => db.query(`update hl_entries set line_sent_at = now() where id = $1`, [b.id]))
     return send(res, 200, { sent: true })
   }
@@ -240,6 +248,20 @@ async function lineFn(res, b, user) {
     const s = r.rows[0]
     if (!line.group || !s || (b.op === 'settled') === Boolean(s.voided_at)) return send(res, 200, { sent: false })
     line.sent.push({ op: b.op, by: user.name, no: s.no, n: s.n, out: Number(s.out_total) })
+    return send(res, 200, { sent: true })
+  }
+  if (b.op === 'mom') {
+    const r = await serial(() => db.query(`select * from hl_entries where id = $1`, [b.id]))
+    const e = r.rows[0]
+    if (!line.group || !line.notify || !e || !e.mom || e.mom_repay_id || e.deleted_at) return send(res, 200, { sent: false })
+    line.sent.push({ op: 'mom', id: e.id, by: user.name, amount: e.amount, title: e.title, owed: await owed() })
+    return send(res, 200, { sent: true })
+  }
+  if (b.op === 'mom_repaid' || b.op === 'mom_unrepaid') {
+    const r = await serial(() => db.query(`select * from hl_mom_repays where id = $1`, [b.id]))
+    const x = r.rows[0]
+    if (!line.group || !x || (b.op === 'mom_repaid') === Boolean(x.voided_at)) return send(res, 200, { sent: false })
+    line.sent.push({ op: b.op, by: user.name, amount: Number(x.amount), n: x.n })
     return send(res, 200, { sent: true })
   }
   if (b.op === 'changed') {

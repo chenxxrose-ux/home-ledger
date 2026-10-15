@@ -28,7 +28,9 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
   const dom = pickedDom ?? Number(date.slice(8))
   // 待繳：新記的支出一律先當待繳（他們都是先打好、繳了再勾），不是的話自己關掉
   const [pickedTodo, setTodo] = useState<boolean | null>(entry ? Boolean(entry.todo) : null)
-  const todo = pickedTodo ?? kind === 'out'
+  // 媽媽代繳：媽媽先幫忙繳了，所以不是待繳；另外累計欠媽媽多少
+  const [mom, setMom] = useState(Boolean(entry?.mom))
+  const todo = !(kind === 'out' && mom) && (pickedTodo ?? kind === 'out')
   const [newCat, setNewCat] = useState(false)
   const rule = entry?.rule_id ? data.rules.find((r) => r.id === entry.rule_id) : undefined
   const [alsoRule, setAlsoRule] = useState(true)
@@ -51,13 +53,13 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
       if (n > 100000000) throw new AppError('金額太大了，請確認一下', 'validation')
       if (!catId) throw new AppError('請選一個分類', 'validation')
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new AppError('請選日期', 'validation')
-      const input = { kind, amount: n, title: title.trim(), category_id: catId, day: date, note: note.trim(), todo }
+      const input = { kind, amount: n, title: title.trim(), category_id: catId, day: date, note: note.trim(), todo, mom: kind === 'out' && mom }
       if (entry) {
         await actions.updateEntry(entry, input, Boolean(rule && rule.stopped_at == null && alsoRule), repeat ? dom : null)
         toast({ text: repeat ? `已設成每月固定，從下個月起每月 ${dom} 號自動記` : '已修改' })
       } else {
         await actions.addEntry(input, repeat ? dom : null)
-        toast({ text: repeat ? `已記下來，從下個月起每月 ${dom} 號自動記` : todo ? '已記下來，繳了再回來勾' : '已記下來' })
+        toast({ text: repeat ? `已記下來，從下個月起每月 ${dom} 號自動記` : kind === 'out' && mom ? '已記下來，算在欠媽媽的帳' : todo ? '已記下來，繳了再回來勾' : '已記下來' })
       }
     })
     if (ok) onClose()
@@ -140,6 +142,11 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
                 aria-pressed={catId === c.id}
                 onClick={() => {
                   setCatId(c.id)
+                  // 他們自己建了「媽媽代繳」分類：選了就當媽媽代繳
+                  if (c.name.includes('媽媽代繳')) {
+                    setMom(true)
+                    setTodo(false)
+                  }
                   setError(null)
                 }}
               >
@@ -172,8 +179,33 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
               {kind === 'out' ? '待繳' : '還沒收到'}
               <small>{todo ? '先記起來，繳了再回到主畫面勾' : kind === 'out' ? '已經繳了' : '先打好、錢還沒進來的就打開'}</small>
             </span>
-            <input type="checkbox" className="switch" checked={todo} onChange={(e) => setTodo(e.target.checked)} />
+            <input
+              type="checkbox"
+              className="switch"
+              checked={todo}
+              onChange={(e) => {
+                setTodo(e.target.checked)
+                if (e.target.checked) setMom(false)
+              }}
+            />
           </label>
+          {kind === 'out' && (
+            <label className="row">
+              <span className="row-label grow">
+                媽媽代繳
+                <small>{mom ? '算在欠媽媽的帳，群組會收到媽媽代繳卡片' : '媽媽先幫忙繳的就打開'}</small>
+              </span>
+              <input
+                type="checkbox"
+                className="switch"
+                checked={mom}
+                onChange={(e) => {
+                  setMom(e.target.checked)
+                  if (e.target.checked) setTodo(false)
+                }}
+              />
+            </label>
+          )}
           {!rule && (
             <label className="row">
               <span className="row-label grow">

@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useData } from '../data/store'
 import { MonthBar } from '../../ui/kit'
-import { cumulative, inMonth, todos, totals, unsettled } from '../../lib/stats'
+import { cumulative, inMonth, momOwed, todos, totals, unsettled } from '../../lib/stats'
+import { MomSheet } from '../mom/MomSheet'
 import { usePaid } from '../shared/usePaid'
 import { useRemove } from '../shared/useRemove'
 import { fmt } from '../../lib/money'
@@ -50,6 +51,21 @@ export function HomePage({
   const todoOut = todo.reduce((a, e) => a + (e.kind === 'out' ? e.amount : 0), 0)
   const paid = usePaid()
   const remove = useRemove()
+  const owed = useMemo(() => momOwed(data.entries), [data.entries])
+  const owedTotal = owed.reduce((a, e) => a + e.amount, 0)
+  const hasMom = owed.length > 0 || data.momRepays.length > 0
+  const [momOpen, setMomOpen] = useState(false)
+  // LINE 媽媽代繳卡片的「看媽媽代繳」（#mom）
+  useEffect(() => {
+    const read = () => {
+      if (location.hash !== '#mom') return
+      history.replaceState(null, '', location.pathname)
+      setMomOpen(true)
+    }
+    read()
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [])
 
   // 跟上個月同一天比（上個月沒那麼多天就比到月底）
   const sameDay = upTo ?? daysInMonth(month)
@@ -110,6 +126,25 @@ export function HomePage({
         </button>
       )}
 
+      {hasMom && (
+        <button
+          type="button"
+          className="card settle-mini mom-mini"
+          onClick={() => setMomOpen(true)}
+          aria-label={owed.length ? `媽媽代繳，欠媽媽 ${fmt(owedTotal)} 元，${owed.length} 筆，看明細` : '媽媽代繳，都還了，看紀錄'}
+        >
+          <span className="mm-ic">
+            <UiIcon name="heartHand" size={20} />
+          </span>
+          <span className="er-text">
+            <span className="sm-label">媽媽代繳・{owed.length ? '欠媽媽' : '都還了'}</span>
+            <span className="note">{owed.length ? `${owed.length} 筆・從 ${formatDay(owed[0].day, today)} 開始` : '看還給媽媽的紀錄'}</span>
+          </span>
+          <span className="num sm-amt">{fmt(owedTotal)}</span>
+          <UiIcon name="chevR" size={18} />
+        </button>
+      )}
+
       {!hasAny ? (
         <section className="card empty">
           <p className="empty-title">這裡是你們兩個人的生活帳</p>
@@ -152,6 +187,8 @@ export function HomePage({
           </section>
         </>
       )}
+
+      {momOpen && <MomSheet onClose={() => setMomOpen(false)} onOpen={onOpen} />}
 
       <div className="fab-row">
         <button type="button" className="fab out" onClick={() => onAdd('out')}>
