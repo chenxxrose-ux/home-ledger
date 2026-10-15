@@ -6,6 +6,7 @@ import { fmt } from '../../lib/money'
 import { formatDay, monthOf, parseYmd, taipeiToday } from '../../lib/dates'
 import { EntryRow } from '../shared/EntryRow'
 import { usePaid } from '../shared/usePaid'
+import { useRemove } from '../shared/useRemove'
 import type { Entry } from '../../lib/types'
 
 const WK = ['一', '二', '三', '四', '五', '六', '日']
@@ -22,6 +23,7 @@ export function ListPage({
   onAddOn: (day: string) => void
 }) {
   const paid = usePaid()
+  const remove = useRemove()
   const data = useData()
   const today = taipeiToday()
   const [picked, setPicked] = useState<string | null>(null)
@@ -113,7 +115,7 @@ export function ListPage({
               )}
               <div className="card list">
                 {g.items.map((e) => (
-                  <EntryRow key={e.id} entry={e} category={cat(e.category_id)} onOpen={() => onOpen(e)} onPaid={() => paid(e, e.title || cat(e.category_id)?.name || '')} />
+                  <EntryRow key={e.id} entry={e} category={cat(e.category_id)} onOpen={() => onOpen(e)} onPaid={() => paid(e, e.title || cat(e.category_id)?.name || '')} onDelete={() => remove(e, e.title || cat(e.category_id)?.name || '')} />
                 ))}
               </div>
             </section>

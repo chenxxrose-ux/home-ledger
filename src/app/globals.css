@@ -56,7 +56,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 .card { background: var(--card); border-radius: var(--r); }
 .card.pad { padding: 14px 16px; }
-.card.list { padding: 0 16px; }
+.card.list { padding: 0 16px; overflow: hidden; }
 .card.list > * + * { border-top: 1px solid var(--hair); }
 .stack { display: flex; flex-direction: column; gap: 10px; }
 .sec { margin: 6px 4px 8px; font-size: 13px; font-weight: 600; color: var(--muted); padding: 0; }
@@ -295,3 +295,16 @@ a.btn { display: flex; align-items: center; justify-content: center; text-decora
 .entry-row.todo .er-amt { color: var(--sub); }
 .todo-head { display: flex; align-items: baseline; justify-content: space-between; }
 .todo-head .note { margin: 0 4px 6px 0; }
+
+/* 往左滑：修改／刪除 */
+/* 滑的時候內容滑到卡片邊緣底下（不是在列中間被切一半），分隔線跟著那一列走 */
+.card.list > .swipe { margin: 0 -16px; border-top: 0; }
+.swipe { position: relative; overflow: hidden; touch-action: pan-y; }
+.swipe-acts[aria-hidden='true'] { pointer-events: none; }
+.swipe-front { position: relative; z-index: 1; padding: 0 16px; background: var(--card); touch-action: pan-y; transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.swipe + .swipe .swipe-front::before { content: ''; position: absolute; top: 0; left: 16px; right: 16px; border-top: 1px solid var(--hair); }
+.swipe-acts { position: absolute; inset: 0 0 0 auto; width: 160px; display: flex; gap: 6px; padding: 6px 16px 6px 10px; }
+.swipe-btn { flex: 1; border: 0; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; font-weight: 600; color: #fff; }
+.swipe-btn.edit { background: var(--in); }
+.swipe-btn.del { background: var(--danger); }
+.swipe-btn:active { filter: brightness(0.9); }
