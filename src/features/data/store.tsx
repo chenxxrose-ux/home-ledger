@@ -29,6 +29,8 @@ export type EntryInput = {
   category_id: string
   day: string
   note: string
+  /** 待繳：先記起來、還沒繳 */
+  todo: boolean
 }
 
 const CACHE_KEY = 'home-ledger-cache-v2'
@@ -173,6 +175,7 @@ function useLedger(session: Session) {
             p_repeat: false,
           }),
         )
+        if (input.todo) await must(supabase.from('hl_entries').update({ todo: true }).eq('id', id))
         if (repeatDom) await must(supabase.rpc('hl_make_rule', { p_entry: id, p_dom: repeatDom }))
         notifyLine(id)
         await refresh()
@@ -206,6 +209,12 @@ function useLedger(session: Session) {
         guard()
         await must(supabase.rpc('hl_unsettle', { p_id: id }))
         tellLine({ op: 'unsettled', id })
+        await refresh()
+      },
+      /** 待繳的勾一下 = 繳了（paid=false 是復原） */
+      async setPaid(id: string, paid: boolean) {
+        guard()
+        await must(supabase.from('hl_entries').update({ todo: !paid }).eq('id', id))
         await refresh()
       },
       async deleteEntry(id: string) {

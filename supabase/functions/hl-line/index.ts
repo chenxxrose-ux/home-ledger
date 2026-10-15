@@ -215,7 +215,7 @@ async function member(req: Request): Promise<{ id: string; name: string } | null
 
 async function notify(cfg: Cfg, me: { id: string; name: string }, id: string) {
   if (!cfg.token || !cfg.group || cfg.notify === "0") return { sent: false };
-  const { data: e } = await db.from("hl_entries").select("id,kind,amount,title,category_id,day,note,rule_id,created_by,created_at,via,deleted_at").eq("id", id).maybeSingle();
+  const { data: e } = await db.from("hl_entries").select("id,kind,amount,title,category_id,day,note,rule_id,created_by,created_at,via,deleted_at,todo").eq("id", id).maybeSingle();
   // 只傳自己剛在網站記的那筆（每月自動補的不傳，省免費則數）
   if (!e || e.deleted_at || e.via !== "app" || e.created_by !== me.id || Date.now() - Date.parse(e.created_at) > 10 * 60 * 1000) return { sent: false };
   const cats = await categories();
@@ -224,7 +224,7 @@ async function notify(cfg: Cfg, me: { id: string; name: string }, id: string) {
   const rows = await monthRows(y, m);
   const card = entryFlex({
     id: e.id, kind: e.kind, by: me.name, amount: e.amount, cat: c?.name || "其他",
-    title: e.title && e.title !== c?.name ? e.title : "", day: e.day, note: e.note || "", monthly: !!e.rule_id,
+    title: e.title && e.title !== c?.name ? e.title : "", day: e.day, note: e.note || "", monthly: !!e.rule_id, todo: !!e.todo,
     monthOut: sum(rows, "out"), monthIn: sum(rows, "in"),
   }, SITE, `${SITE}line-${e.kind === "out" ? "out" : "in"}.png`);
   const out = result(await pushMsgs(cfg.token, cfg.group, [card], e.id));

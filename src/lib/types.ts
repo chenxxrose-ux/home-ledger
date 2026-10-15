@@ -39,6 +39,8 @@ export type Entry = {
   /** 在網站記的是 app，在 LINE 群組打字記的是 line */
   via?: 'app' | 'line'
   settlement_id?: string | null
+  /** 待繳：先記起來、還沒繳 */
+  todo?: boolean
 }
 
 export type Settlement = {

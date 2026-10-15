@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { useData } from '../data/store'
 import { MonthBar } from '../../ui/kit'
-import { cumulative, inMonth, totals, unsettled } from '../../lib/stats'
+import { cumulative, inMonth, todos, totals, unsettled } from '../../lib/stats'
+import { usePaid } from '../shared/usePaid'
 import { fmt } from '../../lib/money'
 import { daysInMonth, formatDay, monthOf, parseYmd, shiftMonth, taipeiToday } from '../../lib/dates'
 import { TrendChart } from './TrendChart'
@@ -44,6 +45,9 @@ export function HomePage({
   const pend = useMemo(() => unsettled(data.entries, today), [data.entries, today])
   const pendOut = pend.reduce((a, e) => a + (e.kind === 'out' ? e.amount : 0), 0)
   const cat = (id: string) => data.categories.find((c) => c.id === id)
+  const todo = useMemo(() => todos(data.entries), [data.entries])
+  const todoOut = todo.reduce((a, e) => a + (e.kind === 'out' ? e.amount : 0), 0)
+  const paid = usePaid()
 
   // 跟上個月同一天比（上個月沒那麼多天就比到月底）
   const sameDay = upTo ?? daysInMonth(month)
@@ -70,6 +74,27 @@ export function HomePage({
           <span className="num">{t.net < 0 ? '−' : ''}{fmt(t.net)}</span>
         </div>
       </section>
+
+      {todo.length > 0 && (
+        <section aria-label="待繳">
+          <div className="todo-head">
+            <h2 className="sec">待繳 {todo.length} 筆</h2>
+            <span className="note num">共 {fmt(todoOut)} 元・繳了就勾右邊的圈</span>
+          </div>
+          <div className="card list">
+            {todo.map((e) => (
+              <EntryRow
+                key={e.id}
+                entry={e}
+                category={cat(e.category_id)}
+                sub={formatDay(e.day, today)}
+                onOpen={() => onOpen(e)}
+                onPaid={() => paid(e, e.title || cat(e.category_id)?.name || '')}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {pend.length > 0 && (
         <button type="button" className="card settle-mini" onClick={onSettle} aria-label={`還沒結算，累計支出 ${fmt(pendOut)} 元，${pend.length} 筆，看結算`}>
@@ -110,7 +135,14 @@ export function HomePage({
             <h2 className="sec">最近記的</h2>
             <div className="card list">
               {recent.map((e) => (
-                <EntryRow key={e.id} entry={e} category={cat(e.category_id)} sub={formatDay(e.day, today)} onOpen={() => onOpen(e)} />
+                <EntryRow
+                  key={e.id}
+                  entry={e}
+                  category={cat(e.category_id)}
+                  sub={formatDay(e.day, today)}
+                  onOpen={() => onOpen(e)}
+                  onPaid={() => paid(e, e.title || cat(e.category_id)?.name || '')}
+                />
               ))}
             </div>
           </section>

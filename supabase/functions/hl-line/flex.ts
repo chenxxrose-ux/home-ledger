@@ -95,6 +95,7 @@ export type EntryCard = {
   day: string; // yyyy-mm-dd
   note: string;
   monthly: boolean; // 每月固定
+  todo?: boolean; // 待繳（先記起來、還沒繳）
   monthOut: number; // 這個月到現在的支出
   monthIn: number;
 };
@@ -126,7 +127,7 @@ export function entryFlex(e: EntryCard, site: string, heroUrl: string) {
       body: {
         type: "box", layout: "vertical", paddingAll: "20px",
         contents: [
-          { type: "text", text: `${word}記帳`, weight: "bold", size: "md", color },
+          { type: "text", text: e.todo ? (out ? "待繳・先記起來" : "還沒收到・先記起來") : `${word}記帳`, weight: "bold", size: "md", color },
           { type: "text", text: `NT$${fmt(e.amount)}`, weight: "bold", size: "3xl", color: INK, margin: "sm" },
           { type: "box", layout: "vertical", spacing: "sm", margin: "lg", contents: rows },
           { type: "separator", margin: "lg", color: "#EEF0F3" },
