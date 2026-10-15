@@ -19,6 +19,8 @@
   --danger-soft: #fbecea;
   --warn: #8a5a00;
   --warn-soft: #fcf1d9;
+  --mom: #b0477c;
+  --mom-soft: #fbeef4;
   --r: 18px;
   --tap: 44px;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -223,7 +225,7 @@ legend.sec { margin-bottom: 8px; }
 .banner.warn { background: var(--warn-soft); color: var(--warn); }
 .banner.error { background: var(--danger-soft); color: var(--danger); }
 .toast {
-  position: fixed; left: 50%; transform: translateX(-50%); z-index: 30;
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 50; /* 在畫面（sheet）上面也按得到「復原」 */
   bottom: calc(var(--tabbar) + 84px); width: calc(100% - 32px); max-width: 448px;
   background: #2a2f36; color: #fff; border-radius: 14px; padding: 8px 8px 8px 14px; min-height: 52px;
   display: flex; align-items: center; justify-content: space-between; gap: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); font-size: 15px;
@@ -309,3 +311,19 @@ a.btn { display: flex; align-items: center; justify-content: center; text-decora
 .swipe-btn.del { background: var(--danger); }
 .swipe-btn:active { filter: brightness(0.9); }
 .todo-note { color: var(--warn); }
+
+/* 媽媽代繳 */
+.mom-mini .sm-amt { color: var(--mom); }
+.mom-mini .mm-ic { flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--mom-soft); color: var(--mom); display: inline-flex; align-items: center; justify-content: center; }
+.mom-hero { padding: 18px; display: flex; flex-direction: column; gap: 6px; }
+.mom-hero .sh-amt { color: var(--mom); }
+.mom-hero .btn { margin-top: 8px; background: var(--mom); }
+.mom-head { display: flex; align-items: baseline; justify-content: space-between; padding-right: 16px; }
+.mom-row { display: grid; grid-template-columns: 6.6em 1fr auto 5.2em; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 8px 0; border: 0; background: none; text-align: left; font-size: 15px; color: var(--ink); }
+.mom-row.static { grid-template-columns: 6.6em 1fr auto; }
+.mom-row:not(.static):active { background: var(--paper); }
+.mr-day { color: var(--sub); font-size: 14px; white-space: nowrap; }
+.mr-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.mr-amt { text-align: right; font-weight: 700; }
+.mr-total { text-align: right; color: var(--mom); font-size: 14px; font-weight: 600; }
+.tag.mom { background: var(--mom-soft); color: var(--mom); font-weight: 600; }

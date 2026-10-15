@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { AppError } from './errors'
-import type { Category, Entry, Kind, Member, Rule, Settlement } from '../../lib/types'
+import type { Category, Entry, Kind, Member, MomRepay, Rule, Settlement } from '../../lib/types'
 import { taipeiToday } from '../../lib/dates'
 import { notifyLine, tellLine } from '../line/api'
 
@@ -13,6 +13,7 @@ export type Data = {
   rules: Rule[]
   entries: Entry[]
   settlements: Settlement[]
+  momRepays: MomRepay[]
   loadedAt: string
 }
 
@@ -31,6 +32,8 @@ export type EntryInput = {
   note: string
   /** 待繳：先記起來、還沒繳 */
   todo: boolean
+  /** 媽媽代繳 */
+  mom: boolean
 }
 
 const CACHE_KEY = 'home-ledger-cache-v2'
@@ -40,7 +43,7 @@ function readCache(userId: string): Data | null {
     const raw = localStorage.getItem(CACHE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as { userId: string; data: Data }
-    return parsed.userId === userId ? parsed.data : null
+    return parsed.userId === userId ? { ...parsed.data, momRepays: parsed.data.momRepays ?? [] } : null
   } catch {
     return null
   }
@@ -66,11 +69,12 @@ async function fetchAll(userId: string): Promise<Data | null> {
   if (!me) return null
   // 每月固定先補上這個月的（兩支手機同時打開也不會重複）
   await must(supabase.rpc('hl_run_rules', { p_today: taipeiToday() }))
-  const [categories, rules, entries, settlements] = await Promise.all([
+  const [categories, rules, entries, settlements, momRepays] = await Promise.all([
     must(supabase.from('hl_categories').select('id,kind,name,icon,color,sort,hidden').order('sort')),
     must(supabase.from('hl_rules').select('id,kind,amount,title,category_id,dom,start_day,stopped_at').order('dom')),
     must(supabase.from('hl_entries').select('*').order('day', { ascending: false })),
     must(supabase.from('hl_settlements').select('id,no,upto,out_total,in_total,n,created_by,created_at').is('voided_at', null).order('no', { ascending: false })),
+    must(supabase.from('hl_mom_repays').select('id,amount,n,created_by,created_at').is('voided_at', null).order('created_at', { ascending: false })),
   ])
   return {
     me,
@@ -79,6 +83,7 @@ async function fetchAll(userId: string): Promise<Data | null> {
     rules: rules as Rule[],
     entries: entries as Entry[],
     settlements: (settlements as Settlement[]).map((x) => ({ ...x, out_total: Number(x.out_total), in_total: Number(x.in_total) })),
+    momRepays: (momRepays as MomRepay[]).map((x) => ({ ...x, amount: Number(x.amount) })),
     loadedAt: new Date().toISOString(),
   }
 }
@@ -140,6 +145,7 @@ function useLedger(session: Session) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_categories' }, later)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_rules' }, later)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_settlements' }, later)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hl_mom_repays' }, later)
       .subscribe()
     const onVisible = () => document.visibilityState === 'visible' && later()
     document.addEventListener('visibilitychange', onVisible)
@@ -175,7 +181,7 @@ function useLedger(session: Session) {
             p_repeat: false,
           }),
         )
-        if (input.todo) await must(supabase.from('hl_entries').update({ todo: true }).eq('id', id))
+        if (input.todo || input.mom) await must(supabase.from('hl_entries').update({ todo: input.todo, mom: input.mom }).eq('id', id))
         if (repeatDom) await must(supabase.rpc('hl_make_rule', { p_entry: id, p_dom: repeatDom }))
         notifyLine(id)
         await refresh()
@@ -187,6 +193,7 @@ function useLedger(session: Session) {
         await must(supabase.from('hl_entries').update(input).eq('id', entry.id))
         const { kind, amount, title, category_id, day } = entry
         tellLine({ op: 'changed', id: entry.id, before: { kind, amount, title, category_id, day } })
+        if (input.mom && !entry.mom) tellLine({ op: 'mom', id: entry.id }) // 改成媽媽代繳 → 傳媽媽代繳卡片
         if (repeatDom && !entry.rule_id) await must(supabase.rpc('hl_make_rule', { p_entry: entry.id, p_dom: repeatDom }))
         if (alsoRule && entry.rule_id) {
           await must(
@@ -204,6 +211,20 @@ function useLedger(session: Session) {
         tellLine({ op: 'settled', id: r.id })
         await refresh()
         return r as unknown as { id: string; no: number; out_total: number; in_total: number; n: number }
+      },
+      /** 還給媽媽了：還沒還的媽媽代繳全部標成已還 */
+      async momRepay() {
+        guard()
+        const r = (await must(supabase.rpc('hl_mom_repay'))) as { id: string; amount: number; n: number }
+        tellLine({ op: 'mom_repaid', id: r.id })
+        await refresh()
+        return { ...r, amount: Number(r.amount) }
+      },
+      async momUnrepay(id: string) {
+        guard()
+        await must(supabase.rpc('hl_mom_unrepay', { p_id: id }))
+        tellLine({ op: 'mom_unrepaid', id })
+        await refresh()
       },
       async unsettle(id: string) {
         guard()

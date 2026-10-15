@@ -314,6 +314,52 @@ test('最近記的：往左滑出修改、刪除；刪了可以復原', async ()
   await expect(row.locator('.swipe-acts')).toHaveAttribute('aria-hidden', 'true')
 })
 
+test('媽媽代繳：另外累計欠媽媽多少，群組收到媽媽代繳卡片；還給媽媽了可以復原', async () => {
+  await bao.getByRole('navigation', { name: '主選單' }).getByRole('button', { name: '主畫面' }).click()
+  const before = (await lineSent()).length
+  for (const [amount, title] of [['802', '媽媽電費'], ['413', '健保費']]) {
+    await bao.getByRole('button', { name: '− 支出' }).click()
+    const sheet = bao.getByRole('dialog', { name: '記一筆' })
+    await sheet.getByLabel('金額').fill(amount)
+    await sheet.getByLabel('名稱').fill(title)
+    await sheet.getByRole('button', { name: '其他', exact: true }).click()
+    await sheet.getByLabel(/^媽媽代繳/).check()
+    await expect(sheet.getByLabel(/^待繳/)).not.toBeChecked() // 媽媽繳了，就不是待繳
+    if (amount === '802') await shot(bao, '17-媽媽代繳-記一筆')
+    await sheet.getByRole('button', { name: '記下來' }).click()
+    await expect(sheet).toBeHidden()
+  }
+  const card = bao.getByRole('button', { name: /^媽媽代繳，欠媽媽 1,215 元，2 筆/ })
+  await expect(card).toBeVisible()
+  await expect.poll(async () => (await lineSent()).length).toBe(before + 2)
+  expect((await lineSent()).slice(-2)).toMatchObject([{ op: 'mom', title: '媽媽電費', owed: 802 }, { op: 'mom', title: '健保費', owed: 1215 }])
+
+  // 明細：日期、每一筆、累計
+  await card.click()
+  const sheet = bao.getByRole('dialog', { name: '媽媽代繳' })
+  await expect(sheet.getByRole('region', { name: '欠媽媽' })).toContainText('1,215')
+  const rows = sheet.getByRole('region', { name: '媽媽代繳的帳' }).locator('.mom-row')
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(1)).toContainText('1,215')
+  await shot(bao, '18-媽媽代繳-明細')
+
+  // 還給媽媽了 → 從 0 開始；復原 → 回來
+  await sheet.getByRole('button', { name: '還給媽媽了' }).click()
+  await bao.getByRole('dialog', { name: '還給媽媽' }).getByRole('button', { name: '還給媽媽了' }).click()
+  await expect(bao.getByRole('status').filter({ hasText: '已還給媽媽 1,215 元' })).toBeVisible()
+  await expect(sheet.getByRole('region', { name: '欠媽媽' })).toContainText('都還給媽媽了')
+  await expect(sheet.getByRole('region', { name: '還給媽媽的紀錄' })).toContainText('1,215')
+  await expect.poll(async () => (await lineSent()).at(-1)).toMatchObject({ op: 'mom_repaid', amount: 1215, n: 2 })
+  await shot(bao, '19-媽媽代繳-還了')
+  await bao.getByRole('button', { name: '復原' }).click()
+  await expect(sheet.getByRole('region', { name: '欠媽媽' })).toContainText('1,215')
+  await expect.poll(async () => (await lineSent()).at(-1)).toMatchObject({ op: 'mom_unrepaid' })
+  await sheet.getByRole('button', { name: '關閉' }).click()
+  // 另一支手機也看得到
+  await berry.getByRole('navigation', { name: '主選單' }).getByRole('button', { name: '主畫面' }).click()
+  await expect(berry.getByRole('button', { name: /^媽媽代繳，欠媽媽 1,215 元/ })).toBeVisible({ timeout: 10000 })
+})
+
 test('結算：每一筆都累計，按結算變成第 1 次，可以復原', async () => {
   const [{ out, n }] = await sql<{ out: number; n: number }>(
     `select coalesce(sum(amount) filter (where kind = 'out'), 0)::int as out, count(*)::int as n from hl_entries where deleted_at is null and settlement_id is null and not todo and day <= $1`,

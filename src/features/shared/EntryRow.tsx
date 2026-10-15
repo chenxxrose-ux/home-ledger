@@ -43,7 +43,13 @@ export function EntryRow({
           {entry.kind === 'in' ? '+' : ''}
           {fmt(entry.amount)}
         </span>
-        {entry.todo ? <span className="tag todo">{entry.kind === 'in' ? '未收到' : '待繳'}</span> : tag && <span className="tag">{tag}</span>}
+        {entry.todo ? (
+          <span className="tag todo">{entry.kind === 'in' ? '未收到' : '待繳'}</span>
+        ) : entry.mom && entry.kind === 'out' ? (
+          <span className="tag mom">{entry.mom_repay_id ? '已還媽媽' : '媽媽代繳'}</span>
+        ) : (
+          tag && <span className="tag">{tag}</span>
+        )}
       </span>
     </button>
   )

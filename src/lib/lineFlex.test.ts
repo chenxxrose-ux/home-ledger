@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { entryFlex, entryLink, settleFlex, settleLink } from '../../supabase/functions/hl-line/flex'
+import { entryFlex, entryLink, momFlex, momLink, settleFlex, settleLink } from '../../supabase/functions/hl-line/flex'
 
 const SITE = 'https://chenxxrose-ux.github.io/home-ledger/'
 const card = {
@@ -59,5 +59,32 @@ describe('記一筆的卡片', () => {
     expect(s).toContain('"薪水"')
     expect(s).toContain('"備註"')
     expect(s).not.toContain('每月固定')
+  })
+})
+
+describe('媽媽代繳卡片', () => {
+  it('這一筆＋累計欠媽媽多少', () => {
+    const m = momFlex(
+      { type: 'paid', id: 'x', by: '阿寶', amount: 802, name: '電費', day: '2026-10-15', note: '', owedN: 3, owed: 2410, since: '2026-09-02' },
+      SITE,
+      SITE + 'line-mom.png',
+    )
+    const s = JSON.stringify(m)
+    expect(m.altText).toBe('媽媽代繳 802 元：電費（累計欠媽媽 2,410 元）')
+    expect(s).toContain('NT$802')
+    expect(s).toContain('10/15（四）')
+    expect(s).toContain('欠媽媽累計')
+    expect(s).toContain('NT$2,410')
+    expect(s).toContain('3 筆・9/2 起')
+    expect(s).toContain(momLink(SITE))
+    expect(momLink(SITE)).toBe(`${SITE}?openExternalBrowser=1#mom`)
+  })
+  it('還給媽媽了', () => {
+    const m = momFlex({ type: 'repaid', id: 'x', by: '草莓', amount: 2410, n: 3, on: '2026-10-20', from: '2026-09-02', upto: '2026-10-15' }, SITE, '')
+    const s = JSON.stringify(m)
+    expect(m.altText).toBe('還給媽媽了 2,410 元（3 筆）')
+    expect(s).toContain('2026/10/20（二）')
+    expect(s).toContain('9/2 ～ 10/15')
+    expect(s).toContain('從 0 重新開始')
   })
 })

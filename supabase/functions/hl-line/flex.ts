@@ -147,3 +147,72 @@ export function entryFlex(e: EntryCard, site: string, heroUrl: string) {
     },
   };
 }
+
+/* ===== 媽媽代繳 → 群組的卡片：這一筆＋累計欠媽媽多少；還給媽媽了也傳一張 ===== */
+const MOM = "#B0477C";
+
+export type MomCard =
+  | { type: "paid"; id: string; by: string; amount: number; name: string; day: string; note: string; owedN: number; owed: number; since: string }
+  | { type: "repaid"; id: string; by: string; amount: number; n: number; on: string; from: string | null; upto: string | null };
+
+/** 卡片上「看媽媽代繳」：用 Safari 打開媽媽代繳的明細 */
+export function momLink(site: string) {
+  return `${site}?openExternalBrowser=1#mom`;
+}
+
+export function momFlex(c: MomCard, site: string, heroUrl: string) {
+  const paid = c.type === "paid";
+  const rows = paid
+    ? [
+        row("日期", `${md(c.day)}（${wd(c.day)}）`),
+        row("項目", c.name),
+        ...(c.note ? [row("備註", c.note)] : []),
+        row("誰記的", c.by),
+      ]
+    : [
+        row("還的日期", longDay(c.on)),
+        row("筆數", `${c.n} 筆`),
+        ...(c.from && c.upto ? [row("帳的期間", c.from === c.upto ? `${md(c.upto)}（${wd(c.upto)}）` : `${md(c.from)} ～ ${md(c.upto)}`)] : []),
+        row("誰按的", c.by),
+      ];
+  const owedBox = paid
+    ? [{
+        type: "box", layout: "vertical", margin: "lg", paddingAll: "14px", cornerRadius: "12px", backgroundColor: "#FBEEF4",
+        contents: [
+          { type: "text", text: "欠媽媽累計", size: "sm", color: MOM, weight: "bold" },
+          {
+            type: "box", layout: "baseline", margin: "sm",
+            contents: [
+              { type: "text", text: `NT$${fmt(c.owed)}`, size: "xl", weight: "bold", color: MOM, flex: 0 },
+              { type: "text", text: `${c.owedN} 筆・${md(c.since)} 起`, size: "sm", color: SUB, align: "end" },
+            ],
+          },
+        ],
+      }]
+    : [{ type: "text", text: "欠媽媽的累計從 0 重新開始。", size: "sm", color: MUTED, margin: "lg", wrap: true }];
+  return {
+    type: "flex",
+    altText: paid ? `媽媽代繳 ${fmt(c.amount)} 元：${c.name}（累計欠媽媽 ${fmt(c.owed)} 元）` : `還給媽媽了 ${fmt(c.amount)} 元（${c.n} 筆）`,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      hero: { type: "image", url: heroUrl, size: "full", aspectRatio: "20:9", aspectMode: "cover", backgroundColor: "#FBEEF4" },
+      body: {
+        type: "box", layout: "vertical", paddingAll: "20px",
+        contents: [
+          { type: "text", text: paid ? "媽媽代繳" : "還給媽媽了", weight: "bold", size: "md", color: MOM },
+          { type: "text", text: `NT$${fmt(c.amount)}`, weight: "bold", size: "3xl", color: INK, margin: "sm" },
+          { type: "box", layout: "vertical", spacing: "sm", margin: "lg", contents: rows },
+          ...owedBox,
+        ],
+      },
+      footer: {
+        type: "box", layout: "vertical", spacing: "xs", paddingAll: "16px", paddingTop: "0px",
+        contents: [
+          { type: "button", style: "primary", color: MOM, height: "md", action: { type: "uri", label: "看媽媽代繳明細", uri: momLink(site) } },
+          { type: "button", style: "link", height: "sm", color: BLUE, action: { type: "uri", label: "打開記帳網站", uri: `${site}?openExternalBrowser=1` } },
+        ],
+      },
+    },
+  };
+}

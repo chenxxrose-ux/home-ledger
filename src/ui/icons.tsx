@@ -117,6 +117,7 @@ const UI: Record<string, string> = {
   plus: 'M12 5v14M5 12h14',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
+  heartHand: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
   pencil: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
   line: 'M4 5h16v11H9l-5 4z',
   receipt: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',

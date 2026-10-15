@@ -127,3 +127,16 @@ export function unsettled(entries: Entry[], upto: string): Entry[] {
 export function todos(entries: Entry[]): Entry[] {
   return entries.filter((e) => live(e) && e.todo).sort((a, b) => a.day.localeCompare(b.day) || a.created_at.localeCompare(b.created_at))
 }
+
+/** 媽媽代繳、還沒還給媽媽的，日子早的在前 */
+export function momOwed(entries: Entry[]): Entry[] {
+  return entries
+    .filter((e) => live(e) && e.mom && !e.mom_repay_id && e.kind === 'out')
+    .sort((a, b) => a.day.localeCompare(b.day) || a.created_at.localeCompare(b.created_at))
+}
+
+/** 每一筆加上到那筆為止的累計 */
+export function runningTotal<T extends { amount: number }>(list: T[]): (T & { total: number })[] {
+  let t = 0
+  return list.map((e) => ({ ...e, total: (t += e.amount) }))
+}

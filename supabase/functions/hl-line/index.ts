@@ -2,14 +2,15 @@
 // 網站打來的（要登入、而且是 hl_members 才可以）：
 //   status 狀態、setup 貼 Channel secret／access token、pair 產生 6 位數配對碼、unlink 解除、
 //   notify_set 開關「每記一筆就傳」、notify 記了一筆後傳到群組（同一筆只會傳一次）、
-//   changed 傳過的那筆改了／刪了 → 補一則更正、settled 結算完傳一張結算卡片、unsettled 結算復原
+//   changed 傳過的那筆改了／刪了 → 補一則更正、settled 結算完傳一張結算卡片、unsettled 結算復原、
+//   mom 媽媽代繳卡片（這筆＋累計欠媽媽）、mom_repaid 還給媽媽了、mom_unrepaid 還錢復原
 // LINE 打來的 Webhook（用 Channel secret 驗簽章）：
 //   群組裡傳配對碼 → 綁定；打「晚餐 320」→ 記一筆並回覆（回覆不算免費則數）；
 //   「本月」看這個月；「取消」刪掉剛剛在群組記的那筆；「說明」看用法
 // 資料庫排程每月 1 號打 op=monthly（帶只存在資料庫裡的 cron_key）→ 上個月總結
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fmt, parseLine, type Cat } from "./parse.ts";
-import { entryFlex, settleFlex } from "./flex.ts";
+import { entryFlex, momFlex, settleFlex } from "./flex.ts";
 
 const ORIGINS = ["https://chenxxrose-ux.github.io", "http://localhost:5173", "http://localhost:4173"];
 const API = "https://api.line.me/v2/bot";
@@ -215,9 +216,14 @@ async function member(req: Request): Promise<{ id: string; name: string } | null
 
 async function notify(cfg: Cfg, me: { id: string; name: string }, id: string) {
   if (!cfg.token || !cfg.group || cfg.notify === "0") return { sent: false };
-  const { data: e } = await db.from("hl_entries").select("id,kind,amount,title,category_id,day,note,rule_id,created_by,created_at,via,deleted_at,todo").eq("id", id).maybeSingle();
+  const { data: e } = await db.from("hl_entries").select("id,kind,amount,title,category_id,day,note,rule_id,created_by,created_at,via,deleted_at,todo,mom").eq("id", id).maybeSingle();
   // 只傳自己剛在網站記的那筆（每月自動補的不傳，省免費則數）
   if (!e || e.deleted_at || e.via !== "app" || e.created_by !== me.id || Date.now() - Date.parse(e.created_at) > 10 * 60 * 1000) return { sent: false };
+  if (e.mom && e.kind === "out") { // 媽媽代繳 → 換成媽媽代繳卡片（一則就好）
+    const out = await momCard(cfg, me, e, e.id);
+    if (out.sent) await db.from("hl_entries").update({ line_sent_at: new Date().toISOString() }).eq("id", e.id);
+    return out;
+  }
   const cats = await categories();
   const c = cats.find((x) => x.id === e.category_id);
   const [y, m] = e.day.split("-").map(Number);
@@ -230,6 +236,49 @@ async function notify(cfg: Cfg, me: { id: string; name: string }, id: string) {
   const out = result(await pushMsgs(cfg.token, cfg.group, [card], e.id));
   if (out.sent) await db.from("hl_entries").update({ line_sent_at: new Date().toISOString() }).eq("id", e.id);
   return out;
+}
+
+// 媽媽代繳卡片：這一筆＋到現在累計欠媽媽多少（還沒還的）
+type MomRow = { id: string; amount: number; title: string; category_id: string; day: string; note: string | null };
+async function momCard(cfg: Cfg, me: { name: string }, e: MomRow, key: string) {
+  const [{ data: rows }, cats] = await Promise.all([
+    db.from("hl_entries").select("amount,day").eq("mom", true).eq("kind", "out").is("mom_repay_id", null).is("deleted_at", null),
+    categories(),
+  ]);
+  const list = (rows || []) as { amount: number; day: string }[];
+  const c = cats.find((x) => x.id === e.category_id);
+  const name = e.title && e.title !== c?.name ? e.title : c?.name || "其他";
+  const msg = momFlex({
+    type: "paid", id: e.id, by: me.name, amount: e.amount, name, day: e.day, note: e.note || "",
+    owedN: list.length, owed: list.reduce((a, r) => a + r.amount, 0), since: list.map((r) => r.day).sort()[0] || e.day,
+  }, SITE, `${SITE}line-mom.png`);
+  return result(await pushMsgs(cfg.token, cfg.group, [msg], await retryKey(`mom/${key}`)));
+}
+
+// 在網站把一筆改成媽媽代繳 → 傳媽媽代繳卡片（剛改的才傳，同一筆只傳一次）
+async function momChanged(cfg: Cfg, me: { id: string; name: string }, id: string) {
+  if (!cfg.token || !cfg.group || cfg.notify === "0") return { sent: false };
+  const { data: e } = await db.from("hl_entries").select("id,kind,amount,title,category_id,day,note,mom,mom_repay_id,deleted_at,updated_at").eq("id", id).maybeSingle();
+  if (!e || !e.mom || e.kind !== "out" || e.mom_repay_id || e.deleted_at || Date.now() - Date.parse(e.updated_at) > 10 * 60 * 1000) return { sent: false };
+  return momCard(cfg, me, e, `${id}/changed`);
+}
+
+// 還給媽媽了 → 傳一張卡片；復原 → 傳一則說明
+async function momRepaid(cfg: Cfg, me: { id: string; name: string }, id: string, undo: boolean) {
+  if (!cfg.token || !cfg.group) return { sent: false };
+  const { data: r } = await db.from("hl_mom_repays").select("id,amount,n,created_by,created_at,voided_at").eq("id", id).maybeSingle();
+  if (!r) return { sent: false };
+  if (undo) {
+    if (!r.voided_at || Date.now() - Date.parse(r.voided_at) > 10 * 60 * 1000) return { sent: false };
+    const text = `↩️ ${me.name}把「還給媽媽 ${fmt(Number(r.amount))} 元」復原了\n那 ${r.n} 筆回到欠媽媽的累計，上面那張卡片不算。`;
+    return result(await push(cfg.token, cfg.group, text, await retryKey(`mom_unrepaid/${id}`)));
+  }
+  if (r.voided_at || r.created_by !== me.id || Date.now() - Date.parse(r.created_at) > 10 * 60 * 1000) return { sent: false };
+  const { data: rows } = await db.from("hl_entries").select("day").eq("mom_repay_id", id);
+  const days = ((rows || []) as { day: string }[]).map((x) => x.day).sort();
+  const on = new Date(Date.parse(r.created_at) + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const msg = momFlex({ type: "repaid", id, by: me.name, amount: Number(r.amount), n: r.n, on, from: days[0] || null, upto: days[days.length - 1] || null }, SITE, `${SITE}line-mom.png`);
+  return result(await pushMsgs(cfg.token, cfg.group, [msg], await retryKey(`mom_repaid/${id}`)));
 }
 
 const entryLabel = (cats: Cat[], e: { category_id: string; title: string }) => {
@@ -355,8 +404,10 @@ Deno.serve(async (req) => {
       if (typeof b.id !== "string" || !/^[0-9a-f-]{36}$/.test(b.id)) return json(req, { error: "bad id" }, 400);
       return json(req, await notify(cfg, me, b.id));
     }
-    if (b.op === "changed" || b.op === "settled" || b.op === "unsettled") {
+    if (b.op === "changed" || b.op === "settled" || b.op === "unsettled" || b.op === "mom" || b.op === "mom_repaid" || b.op === "mom_unrepaid") {
       if (typeof b.id !== "string" || !/^[0-9a-f-]{36}$/.test(b.id)) return json(req, { error: "bad id" }, 400);
+      if (b.op === "mom") return json(req, await momChanged(cfg, me, b.id));
+      if (b.op === "mom_repaid" || b.op === "mom_unrepaid") return json(req, await momRepaid(cfg, me, b.id, b.op === "mom_unrepaid"));
       if (b.op === "settled") return json(req, await settled(cfg, me, b.id));
       if (b.op === "unsettled") return json(req, await unsettled(cfg, me, b.id));
       const p = b.before;
