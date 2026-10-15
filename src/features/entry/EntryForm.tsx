@@ -142,6 +142,11 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
                 aria-pressed={catId === c.id}
                 onClick={() => {
                   setCatId(c.id)
+                  // 他們自己建了「媽媽代繳」分類：選了就當媽媽代繳
+                  if (c.name.includes('媽媽代繳')) {
+                    setMom(true)
+                    setTodo(false)
+                  }
                   setError(null)
                 }}
               >

@@ -358,6 +358,15 @@ test('媽媽代繳：另外累計欠媽媽多少，群組收到媽媽代繳卡�
   // 另一支手機也看得到
   await berry.getByRole('navigation', { name: '主選單' }).getByRole('button', { name: '主畫面' }).click()
   await expect(berry.getByRole('button', { name: /^媽媽代繳，欠媽媽 1,215 元/ })).toBeVisible({ timeout: 10000 })
+  // 自己建的「媽媽代繳」分類：選了就自動打開
+  await sql(`insert into hl_categories (kind, name, icon, color, sort) values ('out', '媽媽代繳', 'star', 'pink', 99)`)
+  await bao.reload()
+  await bao.getByRole('button', { name: '− 支出' }).click()
+  const form = bao.getByRole('dialog', { name: '記一筆' })
+  await form.getByRole('button', { name: '媽媽代繳', exact: true }).click()
+  await expect(form.getByLabel(/^媽媽代繳/)).toBeChecked()
+  await expect(form.getByLabel(/^待繳/)).not.toBeChecked()
+  await form.getByRole('button', { name: '取消' }).click()
 })
 
 test('結算：每一筆都累計，按結算變成第 1 次，可以復原', async () => {
