@@ -3,6 +3,7 @@ import { useData } from '../data/store'
 import { MonthBar } from '../../ui/kit'
 import { cumulative, inMonth, todos, totals, unsettled } from '../../lib/stats'
 import { usePaid } from '../shared/usePaid'
+import { useRemove } from '../shared/useRemove'
 import { fmt } from '../../lib/money'
 import { daysInMonth, formatDay, monthOf, parseYmd, shiftMonth, taipeiToday } from '../../lib/dates'
 import { TrendChart } from './TrendChart'
@@ -48,6 +49,7 @@ export function HomePage({
   const todo = useMemo(() => todos(data.entries), [data.entries])
   const todoOut = todo.reduce((a, e) => a + (e.kind === 'out' ? e.amount : 0), 0)
   const paid = usePaid()
+  const remove = useRemove()
 
   // 跟上個月同一天比（上個月沒那麼多天就比到月底）
   const sameDay = upTo ?? daysInMonth(month)
@@ -90,6 +92,7 @@ export function HomePage({
                 sub={formatDay(e.day, today)}
                 onOpen={() => onOpen(e)}
                 onPaid={() => paid(e, e.title || cat(e.category_id)?.name || '')}
+                onDelete={() => remove(e, e.title || cat(e.category_id)?.name || '')}
               />
             ))}
           </div>
@@ -142,6 +145,7 @@ export function HomePage({
                   sub={formatDay(e.day, today)}
                   onOpen={() => onOpen(e)}
                   onPaid={() => paid(e, e.title || cat(e.category_id)?.name || '')}
+                onDelete={() => remove(e, e.title || cat(e.category_id)?.name || '')}
                 />
               ))}
             </div>

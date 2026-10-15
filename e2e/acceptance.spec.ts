@@ -36,6 +36,22 @@ async function shot(page: Page, name: string) {
   if (shots) await page.screenshot({ path: `${shots}/${name}.png`, fullPage: false })
 }
 
+// 用手指往左滑（真的觸控事件，跟 iPhone 一樣）
+async function swipeLeft(page: Page, target: ReturnType<Page['locator']>, dist = 200) {
+  await target.evaluate((el) => el.scrollIntoView({ block: 'center' })) // 別被下面固定的按鈕擋住
+  const b = (await target.boundingBox())!
+  const y = b.y + b.height / 2
+  const x0 = b.x + b.width - 30
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y }] })
+  for (let i = 1; i <= 10; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 - (dist * i) / 10, y }] })
+    await page.waitForTimeout(16)
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
 async function add(page: Page, o: { kind?: '支出' | '收入'; amount: string; title?: string; cat: string; day?: string; repeat?: boolean }) {
   await page.getByRole('button', { name: o.kind === '收入' ? '＋ 收入' : '− 支出' }).click()
   const sheet = page.getByRole('dialog', { name: '記一筆' })
@@ -266,6 +282,35 @@ test('待繳：先記起來，繳了勾一下；可以復原；待繳的不算�
   await expect(bao.getByRole('region', { name: '待繳' })).toContainText('台哥大分期')
   const [{ todo }] = await sql<{ todo: boolean }>(`select todo from hl_entries where title = '台哥大分期'`)
   expect(todo).toBe(true)
+})
+
+test('最近記的：往左滑出修改、刪除；刪了可以復原', async () => {
+  const recent = bao.getByRole('region', { name: '最近記的' })
+  const row = recent.locator('.swipe').first()
+  const name = (await row.locator('.er-title').innerText()).trim()
+  await swipeLeft(bao, row)
+  await expect(row.getByRole('button', { name: '刪除' })).toBeVisible()
+  await shot(bao, '16-左滑')
+  // 點別的地方 → 收回去，不會打開那一筆
+  await row.locator('.entry-row').click()
+  await expect(bao.getByRole('dialog', { name: '修改這一筆' })).toHaveCount(0)
+  await expect(row.locator('.swipe-acts')).toHaveAttribute('aria-hidden', 'true')
+  // 滑開 → 修改：打開這一筆
+  await swipeLeft(bao, row)
+  await row.getByRole('button', { name: '修改' }).click()
+  const sheet = bao.getByRole('dialog', { name: '修改這一筆' })
+  await expect(sheet).toBeVisible()
+  await sheet.getByRole('button', { name: /關閉|取消/ }).first().click()
+  await expect(sheet).toBeHidden()
+  // 滑開 → 刪除：馬上刪，可以復原
+  await swipeLeft(bao, row)
+  await row.getByRole('button', { name: '刪除' }).click()
+  await expect(bao.getByRole('status').filter({ hasText: `已刪除：${name}` })).toBeVisible()
+  await expect(recent.locator('.er-title', { hasText: name })).toHaveCount(0)
+  await bao.getByRole('button', { name: '復原' }).click()
+  await expect(recent.locator('.er-title', { hasText: name }).first()).toBeVisible()
+  // 刪完會收回去
+  await expect(row.locator('.swipe-acts')).toHaveAttribute('aria-hidden', 'true')
 })
 
 test('結算：每一筆都累計，按結算變成第 1 次，可以復原', async () => {
