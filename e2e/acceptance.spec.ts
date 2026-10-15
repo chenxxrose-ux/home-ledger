@@ -232,6 +232,13 @@ test('改了傳過的那筆 → 群組補一則更正；可以設成每月固定
   expect(r).toMatchObject({ dom: 5, start_day: `${shiftMonth(month, 1)}-01`, cat: '手搖飲' })
   await expect.poll(async () => (await lineSent()).length).toBe(before + 1)
   expect((await lineSent()).at(-1)).toMatchObject({ op: 'changed', by: '阿寶', from: today, to: d })
+
+  // LINE 卡片的「查看這筆明細」→ 打開那一筆
+  const [{ id }] = await sql<{ id: string }>(`select id from hl_entries where title = '飲料'`)
+  await berry.goto(`/?openExternalBrowser=1#entry/${id}`)
+  const opened = berry.getByRole('dialog', { name: '修改這一筆' })
+  await expect(opened.getByLabel('名稱')).toHaveValue('飲料')
+  await opened.getByRole('button', { name: '取消' }).click()
 })
 
 test('結算：每一筆都累計，按結算變成第 1 次，可以復原', async () => {

@@ -79,6 +79,28 @@ function Shell() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
+  // LINE 卡片的「查看這筆明細」（#entry/<id>）→ 打開那一筆。剛打開時可能還是上次存的資料，等最新的載入後才找得到
+  const [wantEntry, setWantEntry] = useState<string | null>(null)
+  useEffect(() => {
+    const read = () => {
+      const m = /^#entry\/([0-9a-f-]{36})$/.exec(location.hash)
+      if (!m) return
+      history.replaceState(null, '', location.pathname)
+      setWantEntry(m[1])
+    }
+    read()
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [])
+  const entries = state.status === 'ready' ? state.data.entries : null
+  useEffect(() => {
+    const e = wantEntry && entries?.find((x) => x.id === wantEntry && !x.deleted_at)
+    if (!e) return
+    setWantEntry(null)
+    setMonth(monthOf(e.day))
+    setForm({ entry: e })
+  }, [wantEntry, entries])
+
   const setTab = (t: Tab) => {
     history.replaceState(null, '', t === 'home' ? location.pathname : `#${t}`)
     setTabState(t)

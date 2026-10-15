@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { settleFlex, settleLink } from '../../supabase/functions/hl-line/flex'
+import { entryFlex, entryLink, settleFlex, settleLink } from '../../supabase/functions/hl-line/flex'
 
 const SITE = 'https://chenxxrose-ux.github.io/home-ledger/'
 const card = {
@@ -32,5 +32,32 @@ describe('結算卡片', () => {
     const m = settleFlex(card, SITE, '')
     expect(m.altText.length).toBeLessThanOrEqual(400)
     for (const b of m.contents.footer.contents) expect(b.action.label.length).toBeLessThanOrEqual(40)
+  })
+})
+
+describe('記一筆的卡片', () => {
+  const e = {
+    id: card.id, kind: 'out' as const, by: '阿寶', amount: 3188, cat: '其他', title: '台哥大分期', day: '2026-10-14',
+    note: '', monthly: true, monthOut: 12345, monthIn: 0,
+  }
+  it('大金額、明細、按鈕連到那一筆', () => {
+    const m = entryFlex(e, SITE, SITE + 'line-out.png')
+    const s = JSON.stringify(m)
+    expect(m.altText).toBe('阿寶記了一筆支出 3,188 元：台哥大分期')
+    expect(s).toContain('支出記帳')
+    expect(s).toContain('NT$3,188')
+    expect(s).toContain('10/14（三）')
+    expect(s).toContain('其他・台哥大分期')
+    expect(s).toContain('每月固定')
+    expect(s).toContain('10 月到現在：支出 12,345・收入 0')
+    expect(s).toContain(entryLink(SITE, e.id))
+    expect(s).not.toContain('備註')
+  })
+  it('收入用藍色、沒有名稱就只寫分類', () => {
+    const s = JSON.stringify(entryFlex({ ...e, kind: 'in', cat: '薪水', title: '', monthly: false, note: '十月' }, SITE, ''))
+    expect(s).toContain('收入記帳')
+    expect(s).toContain('"薪水"')
+    expect(s).toContain('"備註"')
+    expect(s).not.toContain('每月固定')
   })
 })

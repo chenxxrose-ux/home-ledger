@@ -9,7 +9,7 @@
 // 資料庫排程每月 1 號打 op=monthly（帶只存在資料庫裡的 cron_key）→ 上個月總結
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fmt, parseLine, type Cat } from "./parse.ts";
-import { settleFlex } from "./flex.ts";
+import { entryFlex, settleFlex } from "./flex.ts";
 
 const ORIGINS = ["https://chenxxrose-ux.github.io", "http://localhost:5173", "http://localhost:4173"];
 const API = "https://api.line.me/v2/bot";
@@ -222,14 +222,12 @@ async function notify(cfg: Cfg, me: { id: string; name: string }, id: string) {
   const c = cats.find((x) => x.id === e.category_id);
   const [y, m] = e.day.split("-").map(Number);
   const rows = await monthRows(y, m);
-  const text = [
-    `🧾 ${me.name}記了一筆${e.kind === "out" ? "支出" : "收入"}`,
-    `${c?.name || ""}${e.title && e.title !== c?.name ? "・" + e.title : ""}　${fmt(e.amount)} 元${e.rule_id ? "（每月）" : ""}`,
-    ...(e.note ? [e.note] : []),
-    dayLabel(e.day),
-    `${m} 月支出 ${fmt(sum(rows, "out"))}・收入 ${fmt(sum(rows, "in"))}`,
-  ].join("\n");
-  const out = result(await push(cfg.token, cfg.group, text, e.id));
+  const card = entryFlex({
+    id: e.id, kind: e.kind, by: me.name, amount: e.amount, cat: c?.name || "其他",
+    title: e.title && e.title !== c?.name ? e.title : "", day: e.day, note: e.note || "", monthly: !!e.rule_id,
+    monthOut: sum(rows, "out"), monthIn: sum(rows, "in"),
+  }, SITE, `${SITE}line-${e.kind === "out" ? "out" : "in"}.png`);
+  const out = result(await pushMsgs(cfg.token, cfg.group, [card], e.id));
   if (out.sent) await db.from("hl_entries").update({ line_sent_at: new Date().toISOString() }).eq("id", e.id);
   return out;
 }
