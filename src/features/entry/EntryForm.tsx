@@ -26,9 +26,9 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
   // 每月幾號：沒特別選就跟著日期
   const [pickedDom, setDom] = useState<number | null>(null)
   const dom = pickedDom ?? Number(date.slice(8))
-  // 待繳：沒特別選的話，日子還沒到的支出就先當待繳
+  // 待繳：新記的支出一律先當待繳（他們都是先打好、繳了再勾），不是的話自己關掉
   const [pickedTodo, setTodo] = useState<boolean | null>(entry ? Boolean(entry.todo) : null)
-  const todo = pickedTodo ?? (kind === 'out' && date > today)
+  const todo = pickedTodo ?? kind === 'out'
   const [newCat, setNewCat] = useState(false)
   const rule = entry?.rule_id ? data.rules.find((r) => r.id === entry.rule_id) : undefined
   const [alsoRule, setAlsoRule] = useState(true)
@@ -170,7 +170,7 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
           <label className="row">
             <span className="row-label grow">
               {kind === 'out' ? '待繳' : '還沒收到'}
-              <small>{todo ? '先記起來，繳了再回來勾' : kind === 'out' ? '先打好、還沒繳的就打開' : '先打好、錢還沒進來的就打開'}</small>
+              <small>{todo ? '先記起來，繳了再回到主畫面勾' : kind === 'out' ? '已經繳了' : '先打好、錢還沒進來的就打開'}</small>
             </span>
             <input type="checkbox" className="switch" checked={todo} onChange={(e) => setTodo(e.target.checked)} />
           </label>
