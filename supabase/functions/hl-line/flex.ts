@@ -83,3 +83,67 @@ export function settleFlex(c: SettleCard, site: string, heroUrl: string) {
     },
   };
 }
+
+/* ===== 記一筆 → 群組的卡片（像銀行的入帳通知） ===== */
+export type EntryCard = {
+  id: string;
+  kind: "out" | "in";
+  by: string; // 誰記的
+  amount: number;
+  cat: string; // 分類名稱
+  title: string; // 名稱（跟分類一樣就空白）
+  day: string; // yyyy-mm-dd
+  note: string;
+  monthly: boolean; // 每月固定
+  todo?: boolean; // 待繳（先記起來、還沒繳）
+  monthOut: number; // 這個月到現在的支出
+  monthIn: number;
+};
+
+/** 卡片上「查看這筆明細」：用 Safari 打開這一筆 */
+export function entryLink(site: string, id: string) {
+  return `${site}?openExternalBrowser=1#entry/${id}`;
+}
+
+export function entryFlex(e: EntryCard, site: string, heroUrl: string) {
+  const out = e.kind === "out";
+  const color = out ? OUT : IN;
+  const word = out ? "支出" : "收入";
+  const [, m] = e.day.split("-").map(Number);
+  const rows = [
+    row("日期", `${md(e.day)}（${wd(e.day)}）`),
+    row("分類", e.title ? `${e.cat}・${e.title}` : e.cat),
+    ...(e.note ? [row("備註", e.note)] : []),
+    ...(e.monthly ? [row("每月固定", "是，每個月會自動記")] : []),
+    row("誰記的", e.by),
+  ];
+  return {
+    type: "flex",
+    altText: `${e.by}記了一筆${word} ${fmt(e.amount)} 元：${e.title || e.cat}`,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      hero: { type: "image", url: heroUrl, size: "full", aspectRatio: "20:9", aspectMode: "cover", backgroundColor: out ? "#FDF1EC" : "#EEF4FB" },
+      body: {
+        type: "box", layout: "vertical", paddingAll: "20px",
+        contents: [
+          { type: "text", text: e.todo ? (out ? "待繳・先記起來" : "還沒收到・先記起來") : `${word}記帳`, weight: "bold", size: "md", color },
+          { type: "text", text: `NT$${fmt(e.amount)}`, weight: "bold", size: "3xl", color: INK, margin: "sm" },
+          { type: "box", layout: "vertical", spacing: "sm", margin: "lg", contents: rows },
+          { type: "separator", margin: "lg", color: "#EEF0F3" },
+          {
+            type: "text", margin: "md", size: "sm", color: MUTED, wrap: true,
+            text: `${m} 月到現在：支出 ${fmt(e.monthOut)}・收入 ${fmt(e.monthIn)}`,
+          },
+        ],
+      },
+      footer: {
+        type: "box", layout: "vertical", spacing: "xs", paddingAll: "16px", paddingTop: "0px",
+        contents: [
+          { type: "button", style: "primary", color: BLUE, height: "md", action: { type: "uri", label: "查看這筆明細", uri: entryLink(site, e.id) } },
+          { type: "button", style: "link", height: "sm", color: BLUE, action: { type: "uri", label: "打開記帳網站", uri: `${site}?openExternalBrowser=1` } },
+        ],
+      },
+    },
+  };
+}

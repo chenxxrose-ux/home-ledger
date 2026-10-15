@@ -232,11 +232,45 @@ test('改了傳過的那筆 → 群組補一則更正；可以設成每月固定
   expect(r).toMatchObject({ dom: 5, start_day: `${shiftMonth(month, 1)}-01`, cat: '手搖飲' })
   await expect.poll(async () => (await lineSent()).length).toBe(before + 1)
   expect((await lineSent()).at(-1)).toMatchObject({ op: 'changed', by: '阿寶', from: today, to: d })
+
+  // LINE 卡片的「查看這筆明細」→ 打開那一筆
+  const [{ id }] = await sql<{ id: string }>(`select id from hl_entries where title = '飲料'`)
+  await berry.goto(`/?openExternalBrowser=1#entry/${id}`)
+  const opened = berry.getByRole('dialog', { name: '修改這一筆' })
+  await expect(opened.getByLabel('名稱')).toHaveValue('飲料')
+  await opened.getByRole('button', { name: '取消' }).click()
+})
+
+test('待繳：先記起來，繳了勾一下；可以復原；待繳的不算進結算', async () => {
+  await bao.getByRole('navigation', { name: '主選單' }).getByRole('button', { name: '主畫面' }).click()
+  await bao.getByRole('button', { name: '− 支出' }).click()
+  const sheet = bao.getByRole('dialog', { name: '記一筆' })
+  await sheet.getByLabel('金額').fill('3188')
+  await sheet.getByLabel('名稱').fill('台哥大分期')
+  await sheet.getByRole('button', { name: '其他', exact: true }).click()
+  await sheet.getByLabel(/^待繳/).check()
+  await sheet.getByRole('button', { name: '記下來' }).click()
+  await expect(sheet).toBeHidden()
+  const box = bao.getByRole('region', { name: '待繳' })
+  await expect(box).toContainText('台哥大分期')
+  await expect(box).toContainText('3,188')
+  await shot(bao, '15-待繳')
+  // 另一支手機也看得到
+  await berry.getByRole('navigation', { name: '主選單' }).getByRole('button', { name: '主畫面' }).click()
+  await expect(berry.getByRole('region', { name: '待繳' })).toContainText('台哥大分期', { timeout: 10000 })
+  // 勾了 → 繳了；復原 → 回到待繳
+  await box.getByRole('button', { name: '勾選已繳：台哥大分期 3,188 元' }).click()
+  await expect(bao.getByRole('status').filter({ hasText: '已繳：台哥大分期' })).toBeVisible()
+  await expect(bao.getByRole('region', { name: '待繳' })).toHaveCount(0)
+  await bao.getByRole('button', { name: '復原' }).click()
+  await expect(bao.getByRole('region', { name: '待繳' })).toContainText('台哥大分期')
+  const [{ todo }] = await sql<{ todo: boolean }>(`select todo from hl_entries where title = '台哥大分期'`)
+  expect(todo).toBe(true)
 })
 
 test('結算：每一筆都累計，按結算變成第 1 次，可以復原', async () => {
   const [{ out, n }] = await sql<{ out: number; n: number }>(
-    `select coalesce(sum(amount) filter (where kind = 'out'), 0)::int as out, count(*)::int as n from hl_entries where deleted_at is null and settlement_id is null and day <= $1`,
+    `select coalesce(sum(amount) filter (where kind = 'out'), 0)::int as out, count(*)::int as n from hl_entries where deleted_at is null and settlement_id is null and not todo and day <= $1`,
     [today],
   )
   expect(n).toBeGreaterThan(0)

@@ -120,5 +120,10 @@ export function short(n: number): string {
 
 /** 還沒結算的（到 upto 那天為止） */
 export function unsettled(entries: Entry[], upto: string): Entry[] {
-  return sortEntries(entries.filter((e) => live(e) && !e.settlement_id && e.day <= upto))
+  return sortEntries(entries.filter((e) => live(e) && !e.settlement_id && !e.todo && e.day <= upto))
+}
+
+/** 待繳的帳（先記起來、還沒繳），日子早的在前 */
+export function todos(entries: Entry[]): Entry[] {
+  return entries.filter((e) => live(e) && e.todo).sort((a, b) => a.day.localeCompare(b.day) || a.created_at.localeCompare(b.created_at))
 }

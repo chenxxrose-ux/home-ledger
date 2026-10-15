@@ -26,6 +26,9 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
   // 每月幾號：沒特別選就跟著日期
   const [pickedDom, setDom] = useState<number | null>(null)
   const dom = pickedDom ?? Number(date.slice(8))
+  // 待繳：沒特別選的話，日子還沒到的支出就先當待繳
+  const [pickedTodo, setTodo] = useState<boolean | null>(entry ? Boolean(entry.todo) : null)
+  const todo = pickedTodo ?? (kind === 'out' && date > today)
   const [newCat, setNewCat] = useState(false)
   const rule = entry?.rule_id ? data.rules.find((r) => r.id === entry.rule_id) : undefined
   const [alsoRule, setAlsoRule] = useState(true)
@@ -48,13 +51,13 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
       if (n > 100000000) throw new AppError('金額太大了，請確認一下', 'validation')
       if (!catId) throw new AppError('請選一個分類', 'validation')
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new AppError('請選日期', 'validation')
-      const input = { kind, amount: n, title: title.trim(), category_id: catId, day: date, note: note.trim() }
+      const input = { kind, amount: n, title: title.trim(), category_id: catId, day: date, note: note.trim(), todo }
       if (entry) {
         await actions.updateEntry(entry, input, Boolean(rule && rule.stopped_at == null && alsoRule), repeat ? dom : null)
         toast({ text: repeat ? `已設成每月固定，從下個月起每月 ${dom} 號自動記` : '已修改' })
       } else {
         await actions.addEntry(input, repeat ? dom : null)
-        toast({ text: repeat ? `已記下來，從下個月起每月 ${dom} 號自動記` : '已記下來' })
+        toast({ text: repeat ? `已記下來，從下個月起每月 ${dom} 號自動記` : todo ? '已記下來，繳了再回來勾' : '已記下來' })
       }
     })
     if (ok) onClose()
@@ -163,6 +166,13 @@ export function EntryForm({ kind: initialKind, entry, day, onClose }: { kind?: K
                 {date === today ? ' 今天' : ''}
               </span>
             </span>
+          </label>
+          <label className="row">
+            <span className="row-label grow">
+              {kind === 'out' ? '待繳' : '還沒收到'}
+              <small>{todo ? '先記起來，繳了再回來勾' : kind === 'out' ? '先打好、還沒繳的就打開' : '先打好、錢還沒進來的就打開'}</small>
+            </span>
+            <input type="checkbox" className="switch" checked={todo} onChange={(e) => setTodo(e.target.checked)} />
           </label>
           {!rule && (
             <label className="row">

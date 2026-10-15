@@ -284,3 +284,14 @@ a.btn { display: flex; align-items: center; justify-content: center; text-decora
 .settle-mini .sm-label { font-size: 15px; font-weight: 600; }
 .settle-mini .sm-amt { font-size: 22px; font-weight: 800; color: var(--out); }
 .settle-mini svg { color: var(--muted); flex: none; }
+
+/* 待繳：勾一下就是繳了 */
+.entry-wrap { display: flex; align-items: center; gap: 4px; }
+.entry-wrap .entry-row { flex: 1; min-width: 0; }
+.paid-btn { flex: none; width: var(--tap); height: var(--tap); margin-right: -8px; border: 0; background: none; display: inline-flex; align-items: center; justify-content: center; }
+.paid-ring { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line-old); background: var(--card); }
+.paid-btn:active .paid-ring { border-color: var(--in); background: var(--in-soft); }
+.tag.todo { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.entry-row.todo .er-amt { color: var(--sub); }
+.todo-head { display: flex; align-items: baseline; justify-content: space-between; }
+.todo-head .note { margin: 0 4px 6px 0; }
