@@ -3,7 +3,7 @@ import { useData, useStore } from '../data/store'
 import { ErrorNote, Sheet, useSubmit, useToast } from '../../ui/kit'
 import { EntryRow } from '../shared/EntryRow'
 import { UiIcon } from '../../ui/icons'
-import { sortEntries, unsettled } from '../../lib/stats'
+import { sortEntries, todos, unsettled } from '../../lib/stats'
 import { fmt } from '../../lib/money'
 import { formatDay, taipeiDateOf, taipeiToday } from '../../lib/dates'
 import type { Entry, Settlement } from '../../lib/types'
@@ -41,6 +41,8 @@ export function SettlePage({ onOpen }: { onOpen: (e: Entry) => void }) {
   const out = list.filter((e) => e.kind === 'out').reduce((a, e) => a + e.amount, 0)
   const inc = list.filter((e) => e.kind === 'in').reduce((a, e) => a + e.amount, 0)
   const last = data.settlements[0]
+  const todo = useMemo(() => todos(data.entries), [data.entries])
+  const todoOut = todo.filter((e) => e.kind === 'out').reduce((a, e) => a + e.amount, 0)
   const cat = (id: string) => data.categories.find((c) => c.id === id)
   const settledOn = (s: Settlement) => formatDay(taipeiDateOf(s.created_at), today)
 
@@ -60,6 +62,11 @@ export function SettlePage({ onOpen }: { onOpen: (e: Entry) => void }) {
         <span className="note">
           {list.length} 筆{inc > 0 ? `・收入 ${fmt(inc)}` : ''}・{last ? `第 ${last.no} 次結算 ${settledOn(last)} 之後記的` : '還沒結算過'}
         </span>
+        {todo.length > 0 && (
+          <span className="note todo-note">
+            另有 {todo.length} 筆待繳 {fmt(todoOut)} 元，在主畫面勾成已繳才會算進來
+          </span>
+        )}
         <button type="button" className="btn primary block" disabled={!list.length || !online || busy} onClick={() => setConfirm(true)}>
           {list.length ? `結算這 ${list.length} 筆` : '沒有要結算的'}
         </button>

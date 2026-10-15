@@ -60,6 +60,7 @@ async function add(page: Page, o: { kind?: '支出' | '收入'; amount: string; 
   await sheet.getByRole('button', { name: o.cat, exact: true }).click()
   if (o.day) await sheet.getByLabel('日期').fill(o.day)
   if (o.repeat) await sheet.getByLabel(/每月固定/).check()
+  if (o.kind !== '收入') await sheet.getByLabel(/^待繳/).uncheck() // 新的支出預設是待繳；這裡記的是已經繳了的
   await sheet.getByRole('button', { name: '記下來' }).click()
   await expect(sheet).toBeHidden()
 }
@@ -264,7 +265,7 @@ test('待繳：先記起來，繳了勾一下；可以復原；待繳的不算�
   await sheet.getByLabel('金額').fill('3188')
   await sheet.getByLabel('名稱').fill('台哥大分期')
   await sheet.getByRole('button', { name: '其他', exact: true }).click()
-  await sheet.getByLabel(/^待繳/).check()
+  await expect(sheet.getByLabel(/^待繳/)).toBeChecked() // 新的支出預設就是待繳
   await sheet.getByRole('button', { name: '記下來' }).click()
   await expect(sheet).toBeHidden()
   const box = bao.getByRole('region', { name: '待繳' })

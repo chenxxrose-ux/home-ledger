@@ -308,3 +308,4 @@ a.btn { display: flex; align-items: center; justify-content: center; text-decora
 .swipe-btn.edit { background: var(--in); }
 .swipe-btn.del { background: var(--danger); }
 .swipe-btn:active { filter: brightness(0.9); }
+.todo-note { color: var(--warn); }
